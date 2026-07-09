@@ -1,0 +1,21 @@
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+env/
+venv/
+
+# ---- 本地数据库：含真实业务数据（客户名/合同号），严禁提交 ----
+*.db
+*.db-wal
+*.db-shm
+
+# ---- 构建产物 ----
+rating-engine-deploy*.zip
+validation_report.json
+offline_preview.html
+
+# ---- 日志 / 系统 ----
+*.log
+.DS_Store
