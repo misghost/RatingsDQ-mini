@@ -242,14 +242,14 @@
       <button id="tabReg" onclick="switchTab('register')">注册</button>
     </div>
 
-    <!-- 市场人员登录（手机号） -->
+    <!-- 市场人员登录（手机号 / 姓名） -->
     <div id="userLogin">
       <div class="field">
-        <label>手机号</label>
-        <input id="userPhone" type="tel" placeholder="请输入注册时填写的手机号" autocomplete="off">
+        <label>手机号 或 姓名</label>
+        <input id="userPhone" type="text" placeholder="如 13800138000 或 刘鹏" autocomplete="off">
       </div>
       <button class="btn-primary" onclick="doLogin('user')">登录</button>
-      <div class="login-hint">使用注册时填写的手机号登录。首次使用请先<strong>注册</strong>并通过管理员审核。</div>
+      <div class="login-hint">已注册市场人员可用<strong>手机号</strong>或<strong>姓名</strong>登录；新用户请先<strong>注册</strong>并通过管理员审核。</div>
     </div>
 
     <!-- 管理员登录 -->
@@ -532,9 +532,11 @@ async function doLogin(role){
     const pwd  = document.getElementById("adminPwd").value;
     payload = { name, role:"admin", password:pwd };
   } else {
-    const phone = document.getElementById("userPhone").value.trim();
-    if(!phone){ errEl.textContent="请输入手机号"; return; }
-    payload = { phone, role:"user" };
+    const val = document.getElementById("userPhone").value.trim();
+    if(!val){ errEl.textContent="请输入手机号或姓名"; return; }
+    // 纯数字且 11 位视为手机号，否则按姓名处理（后端会按手机/姓名解析）
+    const isPhone = /^1[3-9]\d{9}$/.test(val);
+    payload = isPhone ? { phone:val, role:"user" } : { name:val, role:"user" };
   }
   try{
     const r = await fetch(API+"/api/web/login", {

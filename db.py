@@ -269,6 +269,24 @@ def get_user(openid):
     return dict(row) if row else None
 
 
+def find_user_by_phone_or_name(phone, name):
+    """按手机号或姓名解析已注册账号（兼容旧版姓名身份与新版手机号身份）。
+
+    优先手机号，其次姓名（marketer_name）。用于 Web 登录，使历史账号（仅姓名、
+    无手机号）与新注册账号（有手机号）都能登录。
+    """
+    conn = get_conn()
+    c = conn.cursor()
+    u = None
+    if phone:
+        u = c.execute("SELECT * FROM users WHERE phone=?", (phone,)).fetchone()
+    if not u and name:
+        u = c.execute("SELECT * FROM users WHERE marketer_name=?",
+                      (name,)).fetchone()
+    conn.close()
+    return dict(u) if u else None
+
+
 def get_admin_openids():
     conn = get_conn()
     rows = conn.execute("SELECT openid FROM users WHERE role='admin'").fetchall()

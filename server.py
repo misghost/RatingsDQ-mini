@@ -191,18 +191,21 @@ def web_login():
 
     phone = (body.get("phone") or "").strip()
     name = (body.get("name") or "").strip()
-    if phone:
-        openid = "web_" + hashlib.sha1(phone.encode("utf-8")).hexdigest()[:16]
-    elif name:
-        openid = hashlib.sha1(name.encode("utf-8")).hexdigest()[:20]   # 旧姓名登录兼容
-    else:
-        return jsonify({"error": "请输入手机号"}), 400
+    if not (phone or name):
+        return jsonify({"error": "请输入手机号或姓名"}), 400
 
-    oid, err, code_ = _user_gate(openid)
-    if err:
-        return err, code_
-    u = db.get_user(openid)
-    return _issue_session(openid, u)
+    # 按手机号或姓名解析已注册账号（不再自行派生 openid，避免身份错配）
+    u = db.find_user_by_phone_or_name(phone, name)
+    if not u:
+        return jsonify({"code": "NOT_REGISTERED",
+                        "error": "未找到账号，请先注册或通过管理员审核"}), 404
+    if u["status"] != "approved":
+        code = "PENDING" if u["status"] == "pending" else "REJECTED"
+        msg = ("账号审核中，请等待管理员审核" if code == "PENDING"
+               else f"账号未通过审核{f'：{u.get('reject_reason')}' if u.get('reject_reason') else ''}")
+        return jsonify({"code": code, "error": msg}), 403
+
+    return _issue_session(u["openid"], u)
 
 
 # ---------------------------------------------------------------------------
