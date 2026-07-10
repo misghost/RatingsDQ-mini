@@ -5,24 +5,26 @@
     "pages/register/register",
     "pages/notify/notify",
     "pages/upload/upload",
-    "pages/admin/admin"
+    "pages/admin/admin",
+    "pages/messages/messages"
   ],
   "window": {
-    "navigationBarBackgroundColor": "#07c160",
+    "navigationBarBackgroundColor": "#2f6bff",
     "navigationBarTitleText": "评级到期提醒",
     "navigationBarTextStyle": "white",
-    "backgroundColor": "#f5f6f8"
+    "backgroundColor": "#f4f6f8"
   },
   "tabBar": {
-    "color": "#9aa0a6",
-    "selectedColor": "#07c160",
+    "color": "#8a9099",
+    "selectedColor": "#2f6bff",
     "backgroundColor": "#ffffff",
     "borderStyle": "black",
     "list": [
       { "pagePath": "pages/index/index", "text": "我的提醒" },
       { "pagePath": "pages/upload/upload", "text": "上传数据" },
       { "pagePath": "pages/notify/notify", "text": "提醒设置" },
-      { "pagePath": "pages/admin/admin", "text": "管理总览" }
+      { "pagePath": "pages/admin/admin", "text": "管理总览" },
+      { "pagePath": "pages/messages/messages", "text": "消息中心" }
     ]
   },
   "style": "v2",

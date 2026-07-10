@@ -29,7 +29,7 @@ import tempfile
 import hashlib
 import urllib.request
 import urllib.parse
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
@@ -73,6 +73,10 @@ VALIDITY = int(os.environ.get("VALIDITY", "12"))       # 有效期(月)
 REMIND = int(os.environ.get("REMIND", "3"))             # 提醒窗口(月)
 OVERDUE_WINDOW = int(os.environ.get("OVERDUE_WINDOW", "12"))  # 过期噪音窗口(月)
 FALLBACK_WINDOW = int(os.environ.get("FALLBACK_WINDOW", "24"))  # 兜底窗口(月)
+
+# 预警阈值默认值（提前 N 天提醒）。用户可在设置里改。
+DEFAULT_NOTIFY_DAYS = [int(x) for x in
+                       os.environ.get("NOTIFY_DAYS", "30,7").split(",") if x.strip()]
 
 db.init_db()
 
@@ -157,6 +161,7 @@ def login():
     if err:
         return err, code_
     u = db.get_user(openid)
+    db.log_audit(openid, "login", detail="wx")
     return _issue_session(openid, u)
 
 
@@ -187,6 +192,7 @@ def web_login():
         openid = "admin"
         db.upsert_user(openid, role="admin", marketer_name=name)
         u = db.get_user(openid)
+        db.log_audit(openid, "login", detail="web/admin")
         return _issue_session(openid, u)
 
     phone = (body.get("phone") or "").strip()
@@ -205,6 +211,7 @@ def web_login():
                else f"账号未通过审核{f'：{u.get('reject_reason')}' if u.get('reject_reason') else ''}")
         return jsonify({"code": code, "error": msg}), 403
 
+    db.log_audit(u["openid"], "login", detail="web")
     return _issue_session(u["openid"], u)
 
 
@@ -245,6 +252,8 @@ def register():
     if u and u["status"] == "approved":
         return jsonify({"status": "approved", "message": "该账号已审核通过，可直接登录"})
     db.register_user(openid, organization, name, phone, email, role="user")
+    db.log_audit(None, "register", target=phone,
+                 detail=f"{name} / {organization}")
     return jsonify({"status": "pending", "message": "注册成功，请等待管理员审核"})
 
 
@@ -283,6 +292,7 @@ def admin_review_user():
         return jsonify({"error": "用户不存在"}), 404
     new_status = "approved" if action == "approve" else "rejected"
     db.set_user_status(target, new_status, reviewed_by=oid, reason=reason)
+    db.log_audit(oid, "review:" + action, target=target, detail=reason)
     return jsonify({"ok": True, "openid": target, "status": new_status})
 
 
@@ -300,7 +310,8 @@ def get_notification():
     return jsonify({
         "channels": json.loads(n["channels"] or "[]"),
         "email": n["email"],
-        "wx_subscribed": n["wx_subscribed"]
+        "wx_subscribed": n["wx_subscribed"],
+        "notify_days": db.get_notify_days(oid)
     })
 
 
@@ -317,7 +328,12 @@ def set_notification():
     if "email" in channels and not email:
         return jsonify({"error": "启用邮件提醒需填写邮箱地址"}), 400
     db.set_notif(oid, json.dumps(channels, ensure_ascii=False), email)
-    return jsonify({"ok": True, "channels": channels, "email": email})
+    if "notify_days" in body and isinstance(body["notify_days"], list):
+        days = [int(x) for x in body["notify_days"] if str(x).isdigit()]
+        if days:
+            db.set_notify_days(oid, days)
+    return jsonify({"ok": True, "channels": channels, "email": email,
+                    "notify_days": db.get_notify_days(oid)})
 
 
 @app.route("/api/my/notification/subscribe", methods=["POST"])
@@ -360,7 +376,75 @@ def notif_test():
             else:
                 results.append({"channel": "miniprogram", "ok": False,
                                 "note": "未订阅或未配置模板/微信凭证"})
+    db.add_message(oid, "system", "【测试】站内消息",
+                   "这是一条测试站内消息，消息中心工作正常。")
     return jsonify({"ok": True, "results": results})
+
+
+def dispatch_notifications(ref_date=None, dry=False, manual=False):
+    """扫描所有已审核市场人员的到期/临期评级，按各自预警阈值与订阅渠道推送。
+    站内消息中心（始终创建）+ 邮件（SMTP 已配）+ 微信订阅（已订阅且已配）。
+    返回 {messages, sent, skipped}。供手动触发与定时任务共用。"""
+    if ref_date is None:
+        ref_date = date.today()
+    ref_iso = ref_date.isoformat()
+    # 1) 站内消息：所有 approved 市场人员（系统自带通道，不依赖渠道开关）
+    all_users = db.list_users(status="approved", role="user")
+    messages, sent, skipped = [], [], []
+    for u in all_users:
+        oid = u["openid"]
+        ratings = db.get_my_ratings(oid)
+        for r in ratings:
+            if r.get("renewed") in (1, "1"):
+                continue
+            try:
+                exp = date.fromisoformat(r["expiry_date"])
+            except Exception:
+                continue
+            days = (exp - ref_date).days
+            if r["status"] != "overdue" and not (r["remind_date"]
+                                                  and r["remind_date"] <= ref_iso):
+                continue
+            ndays = db.get_notify_days(oid)
+            triggered = [d for d in ndays if days <= d]
+            if not triggered and r["status"] != "overdue":
+                continue
+            key = min(triggered) if triggered else -1
+            if db.already_sent(oid, r["id"], key, "inapp"):
+                continue
+            if not dry:
+                tag = "已过期" if r["status"] == "overdue" else "即将到期"
+                db.add_message(oid, "expire_warn",
+                               f"{tag}：{r['subject']}",
+                               f"评级将于 {r['expiry_date']} 到期（剩余 {days} 天），请及时处理。",
+                               rating_id=r["id"])
+                db.mark_sent(oid, r["id"], key, "inapp")
+            messages.append({"openid": oid, "subject": r["subject"], "days": days})
+    # 2) 渠道推送（邮件/微信）：仅对开启对应渠道的用户
+    users = db.get_approved_users_with_notif()
+    for u in users:
+        ratings = db.get_my_ratings(u["openid"])
+        active = [r for r in ratings
+                  if r.get("renewed") in (0, None) and r["status"] in ("due", "overdue")]
+        if not active:
+            continue
+        for ch in u["channels"]:
+            if ch == "email" and u.get("email"):
+                if not dry:
+                    _send_email(u["email"], _notif_subject(active), _notif_body(u, active))
+                sent.append({"openid": u["openid"], "name": u["marketer_name"],
+                             "channel": "email"})
+            elif ch == "miniprogram":
+                if u["wx_subscribed"] and WX_TEMPLATE_ID and WX_APPID and WX_SECRET:
+                    if not dry:
+                        _send_subscribe(u["openid"], active)
+                    sent.append({"openid": u["openid"], "name": u["marketer_name"],
+                                 "channel": "miniprogram"})
+                else:
+                    skipped.append({"openid": u["openid"], "name": u["marketer_name"],
+                                    "channel": "miniprogram", "reason": "未订阅或未配置"})
+    return {"messages": messages, "sent": sent, "skipped": skipped,
+            "ref_date": ref_iso}
 
 
 @app.route("/api/admin/notify/send", methods=["POST"])
@@ -371,32 +455,10 @@ def admin_notify_send():
         return err, code_
     body = request.get_json(silent=True) or {}
     dry = bool(body.get("dry_run", False))
-    ref = date.today()
-    users = db.get_approved_users_with_notif()
-    sent, skipped = [], []
-    for u in users:
-        ratings = db.get_my_ratings(u["openid"])
-        due = [r for r in ratings
-               if r["status"] in ("due", "overdue")
-               or (r["remind_date"] and r["remind_date"] <= ref.isoformat())]
-        if not due:
-            continue
-        for ch in u["channels"]:
-            if ch == "email" and u.get("email"):
-                if not dry:
-                    _send_email(u["email"], _notif_subject(due), _notif_body(u, due))
-                sent.append({"openid": u["openid"], "name": u["marketer_name"],
-                             "channel": "email"})
-            elif ch == "miniprogram":
-                if u["wx_subscribed"] and WX_TEMPLATE_ID and WX_APPID and WX_SECRET:
-                    if not dry:
-                        _send_subscribe(u["openid"], due)
-                    sent.append({"openid": u["openid"], "name": u["marketer_name"],
-                                 "channel": "miniprogram"})
-                else:
-                    skipped.append({"openid": u["openid"], "name": u["marketer_name"],
-                                    "channel": "miniprogram", "reason": "未订阅或未配置"})
-    return jsonify({"sent": sent, "skipped": skipped, "user_count": len(users)})
+    res = dispatch_notifications(ref_date=date.today(), dry=dry, manual=True)
+    db.log_audit(oid, "notify:send",
+                 detail=f"消息 {len(res['messages'])} / 渠道 {len(res['sent'])}")
+    return jsonify(res)
 
 
 # ---- 发送助手（配置驱动，未配置则优雅跳过）----
@@ -501,6 +563,182 @@ def _send_subscribe(openid, ratings):
 
 
 # ---------------------------------------------------------------------------
+# 站内消息中心
+# ---------------------------------------------------------------------------
+@app.route("/api/my/messages", methods=["GET"])
+def my_messages():
+    oid, err, code_ = require_openid()
+    if err:
+        return err, code_
+    unread = request.args.get("unread") == "1"
+    page = int(request.args.get("page", "1"))
+    return jsonify(db.get_messages(oid, unread_only=unread, page=page, page_size=20))
+
+
+@app.route("/api/my/messages/unread", methods=["GET"])
+def my_unread():
+    oid, err, code_ = require_openid()
+    if err:
+        return err, code_
+    return jsonify({"unread": db.unread_count(oid)})
+
+
+@app.route("/api/my/messages/read", methods=["POST"])
+def read_messages():
+    oid, err, code_ = require_openid()
+    if err:
+        return err, code_
+    b = request.get_json(silent=True) or {}
+    db.mark_message_read(oid, b.get("id"))
+    return jsonify({"ok": True, "unread": db.unread_count(oid)})
+
+
+# ---------------------------------------------------------------------------
+# 我的提醒：搜索 / 排序 / 分页 / 续期
+# ---------------------------------------------------------------------------
+@app.route("/api/my/ratings", methods=["GET"])
+def my_ratings():
+    oid, err, code_ = require_openid()
+    if err:
+        return err, code_
+    status = request.args.get("status")
+    if status not in (None, "overdue", "due", "upcoming"):
+        return jsonify({"error": "bad status"}), 400
+    q = request.args.get("q") or None
+    sort = request.args.get("sort", "status")
+    page = int(request.args.get("page", "1"))
+    page_size = min(int(request.args.get("page_size", "50")), 200)
+    inc = request.args.get("include_renewed") == "1"
+    res = db.query_my_ratings(oid, status, q, sort, page, page_size,
+                              include_renewed=inc)
+    return jsonify({
+        "openid": oid,
+        "count": len(res["items"]),
+        "total": res["total"], "page": res["page"], "page_size": res["page_size"],
+        "ratings": [_public(r) for r in res["items"]],
+    })
+
+
+@app.route("/api/my/ratings/<int:rid>/renew", methods=["POST"])
+def renew_rating(rid):
+    oid, err, code_ = require_openid()
+    if err:
+        return err, code_
+    b = request.get_json(silent=True) or {}
+    new_expiry = (b.get("new_expiry") or "").strip() or None
+    db.mark_renewed(rid, openid=oid, new_expiry=new_expiry)
+    db.log_audit(oid, "renew", target=str(rid), detail=new_expiry)
+    return jsonify({"ok": True, "id": rid})
+
+
+@app.route("/api/my/calendar", methods=["GET"])
+def my_calendar():
+    oid, err, code_ = require_openid()
+    if err:
+        return err, code_
+    months = int(request.args.get("months", "6"))
+    return jsonify(db.calendar_expiry(openid=oid, months=months))
+
+
+# ---------------------------------------------------------------------------
+# 导出（CSV，Excel 可直接打开）
+# ---------------------------------------------------------------------------
+def _ratings_to_csv(rows):
+    import csv, io
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["客户名称", "合同号", "评级类型", "项目类型",
+                "出具时间", "到期日", "状态", "归属"])
+    st = {"overdue": "已过期", "due": "即将到期", "upcoming": "有效期内"}
+    for r in rows:
+        w.writerow([r["subject"], r.get("contract_no", ""),
+                    r.get("debt_type", ""), r.get("project_type", ""),
+                    r.get("base_date", ""), r["expiry_date"],
+                    st.get(r["status"], r["status"]), r.get("attribution", "")])
+    return buf.getvalue()
+
+
+def _csv_response(text, filename):
+    from flask import Response
+    from urllib.parse import quote
+    resp = Response(text, mimetype="text/csv; charset=utf-8")
+    resp.headers["Content-Disposition"] = \
+        f"attachment; filename*=UTF-8''{quote(filename)}"
+    return resp
+
+
+@app.route("/api/export/my", methods=["GET"])
+def export_my():
+    oid, err, code_ = require_openid()
+    if err:
+        return err, code_
+    rows = db.get_my_ratings(oid)
+    csv_text = _ratings_to_csv([r for r in rows
+                                if r.get("renewed") in (0, None)])
+    return _csv_response(csv_text, f"我的评级到期_{date.today().isoformat()}.csv")
+
+
+@app.route("/api/export/admin", methods=["GET"])
+def export_admin():
+    oid, err, code_ = _auth_admin()
+    if err:
+        return err, code_
+    ov = db.overview_excluding_renewed()
+    rows = []
+    for o in ov["by_marketer"]:
+        u = db.get_user(o)
+        name = u["marketer_name"] if u else o
+        for r in db.get_marketer_ratings(o):
+            if r.get("renewed") in (1, "1"):
+                continue
+            r2 = dict(r)
+            r2["_mkt"] = name
+            rows.append(r2)
+    import csv, io
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["市场人员", "客户名称", "合同号", "评级类型", "项目类型",
+                "出具时间", "到期日", "状态", "归属"])
+    st = {"overdue": "已过期", "due": "即将到期", "upcoming": "有效期内"}
+    for r in rows:
+        w.writerow([r.get("_mkt", ""), r["subject"], r.get("contract_no", ""),
+                    r.get("debt_type", ""), r.get("project_type", ""),
+                    r.get("base_date", ""), r["expiry_date"],
+                    st.get(r["status"], r["status"]), r.get("attribution", "")])
+    return _csv_response(buf.getvalue(), f"全员评级到期_{date.today().isoformat()}.csv")
+
+
+# ---------------------------------------------------------------------------
+# 管理员：审计日志 / 市场人员下钻（搜索）
+# ---------------------------------------------------------------------------
+@app.route("/api/admin/audit", methods=["GET"])
+def admin_audit():
+    oid, err, code_ = _auth_admin()
+    if err:
+        return err, code_
+    page = int(request.args.get("page", "1"))
+    return jsonify(db.get_audit_log(page=page, page_size=50))
+
+
+@app.route("/api/admin/marketer", methods=["GET"])
+def admin_marketer():
+    oid, err, code_ = _auth_admin()
+    if err:
+        return err, code_
+    target = request.args.get("openid")
+    if not target:
+        return jsonify({"error": "openid required"}), 400
+    q = request.args.get("q") or None
+    sort = request.args.get("sort", "status")
+    page = int(request.args.get("page", "1"))
+    res = db.query_my_ratings(target, None, q, sort, page, 200,
+                              include_renewed=True)
+    return jsonify({"openid": target, "count": len(res["items"]),
+                    "total": res["total"], "page": res["page"],
+                    "ratings": [_public(r) for r in res["items"]]})
+
+
+# ---------------------------------------------------------------------------
 # 上传：管理员后台源数据
 # ---------------------------------------------------------------------------
 @app.route("/api/admin/source", methods=["POST"])
@@ -518,6 +756,7 @@ def upload_admin_source():
         return jsonify({"error": f"解析失败: {e}"}), 422
     n = db.replace_admin_source(recs)
     db.log_upload(oid, "admin_xls", f.filename, n, 0, {})
+    db.log_audit(oid, "upload:admin_source", detail=f"{n} 条评级记录")
     # 自动触发一次计算（管理员源数据变化后）
     stats = run_compute()
     return jsonify({"admin_records": n, "compute_stats": stats})
@@ -563,6 +802,7 @@ def upload_contract():
     db.replace_contract_uploads(oid, rows)
     db.log_upload(oid, "contract", f.filename, len(rows), 0,
                   {"market_as": market_as, "marketers_found": marketers})
+    db.log_audit(oid, "upload:contract", detail=f"{market_as} / {len(rows)} 份合同")
     run_compute()
     return jsonify({
         "openid": oid,
@@ -601,6 +841,7 @@ def upload_fallback():
     db.replace_fallback_uploads(oid, source, rows)
     db.log_upload(oid, source, f.filename, len(kept),
                   res["summary"]["dropped_rows"], res["mapping"])
+    db.log_audit(oid, "upload:" + source, detail=f"{len(kept)} 条 / 丢弃 {res['summary']['dropped_rows']}")
     run_compute()
     return jsonify({
         "openid": oid,
@@ -717,25 +958,6 @@ def compute():
 
 
 # ---------------------------------------------------------------------------
-# 查询：个人到期提醒
-# ---------------------------------------------------------------------------
-@app.route("/api/my/ratings", methods=["GET"])
-def my_ratings():
-    oid, err, code = require_openid()
-    if err:
-        return err, code
-    status = request.args.get("status")
-    if status not in (None, "overdue", "due", "upcoming"):
-        return jsonify({"error": "bad status"}), 400
-    rows = db.get_my_ratings(oid, status)
-    return jsonify({
-        "openid": oid,
-        "count": len(rows),
-        "ratings": [_public(r) for r in rows],
-    })
-
-
-# ---------------------------------------------------------------------------
 # 查询：管理员总览
 # ---------------------------------------------------------------------------
 @app.route("/api/admin/overview", methods=["GET"])
@@ -743,7 +965,7 @@ def admin_overview():
     oid, err, code = _auth_admin()
     if err:
         return err, code
-    ov = db.get_admin_overview()
+    ov = db.overview_excluding_renewed()
     # 给每个市场人员补名字
     conn = db.get_conn()
     names = {r["openid"]: r["marketer_name"]
@@ -753,19 +975,6 @@ def admin_overview():
                         "total": sum(m.values())}
                    for o, m in ov["by_marketer"].items()}
     return jsonify({**ov, "by_marketer": by_marketer})
-
-
-@app.route("/api/admin/marketer", methods=["GET"])
-def admin_marketer():
-    oid, err, code = _auth_admin()
-    if err:
-        return err, code
-    target = request.args.get("openid")
-    if not target:
-        return jsonify({"error": "openid required"}), 400
-    rows = db.get_marketer_ratings(target)
-    return jsonify({"openid": target, "count": len(rows),
-                    "ratings": [_public(r) for r in rows]})
 
 
 # ---------------------------------------------------------------------------
@@ -785,6 +994,7 @@ def _auth_admin():
 
 def _public(r):
     return {
+        "id": r["id"],
         "subject": r["subject"],
         "contract_no": r["contract_no"],
         "expiry_date": r["expiry_date"],
@@ -793,6 +1003,8 @@ def _public(r):
         "debt_type": r["debt_type"],
         "project_type": r["project_type"],
         "attribution": r["attribution"],
+        "renewed": r.get("renewed", 0),
+        "renewed_at": r.get("renewed_at"),
     }
 
 
@@ -862,7 +1074,9 @@ def web_config():
             "miniprogram": bool(WX_APPID and WX_SECRET and WX_TEMPLATE_ID),
             "email": bool(SMTP_HOST and SMTP_USER and SMTP_PASS)
         },
-        "wx_template_id": WX_TEMPLATE_ID or ""
+        "wx_template_id": WX_TEMPLATE_ID or "",
+        "notify_days_default": DEFAULT_NOTIFY_DAYS,
+        "message_center": True
     })
 
 
@@ -874,6 +1088,19 @@ def _static(name):
 def index():
     """正式 Web 前端（面向浏览器用户）。"""
     return _static("webapp.html")
+
+
+# 微信公众平台 / 小程序「业务域名 / 服务器域名」校验文件托管
+# 将微信下发的校验文件（如 MP_verify_xxxx.txt）放到 deploy 目录下的 verify/ 子目录即可被根路径访问。
+VERIFY_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "verify")
+@app.route("/MP_verify_<token>.txt")
+@app.route("/<token>.txt")
+def wx_verify(token):
+    for cand in (f"MP_verify_{token}.txt", f"{token}.txt"):
+        p = os.path.join(VERIFY_DIR, cand)
+        if os.path.exists(p):
+            return send_file(p, mimetype="text/plain; charset=utf-8")
+    return "", 404
 
 
 @app.route("/preview")

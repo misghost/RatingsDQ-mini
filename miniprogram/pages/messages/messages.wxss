@@ -1,0 +1,7 @@
+.wrap { padding-bottom: 40rpx; }
+.bar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 20rpx 24rpx 0; padding: 16rpx 24rpx;
+  background: #fff; border-radius: 16rpx; box-shadow: 0 4rpx 16rpx rgba(20,30,50,0.04);
+}
+.mk-all { color: #2f6bff; font-size: 26rpx; font-weight: 600; }

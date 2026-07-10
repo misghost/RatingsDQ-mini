@@ -19,3 +19,9 @@ offline_preview.html
 # ---- 日志 / 系统 ----
 *.log
 .DS_Store
+
+# ---- 生产密钥/环境（含管理员口令，严禁提交） ----
+deploy/envfile
+.env
+*.key
+private.*

@@ -83,6 +83,11 @@ def _migrate_users(conn):
         wx_subscribe_at TEXT,
         updated_at      TEXT DEFAULT (datetime('now'))
     )""")
+    # 预警阈值（提前 N 天提醒），JSON 数组
+    _add_col(conn, "user_notif", "notify_days", "TEXT", "'[30,7]'")
+    # 评级记录：续期/重评闭环标记
+    _add_col(conn, "final_ratings", "renewed", "INTEGER", "0")
+    _add_col(conn, "final_ratings", "renewed_at", "TEXT")
 
 
 def init_db():
@@ -164,6 +169,39 @@ def init_db():
         computed_at  TEXT DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_final_openid ON final_ratings(openid);
+
+    CREATE TABLE IF NOT EXISTS audit_log(
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        actor_openid TEXT,
+        actor_name   TEXT,
+        action       TEXT,
+        target       TEXT,
+        detail       TEXT,
+        created_at   TEXT DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS messages(
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        openid      TEXT,
+        type        TEXT,
+        title       TEXT,
+        body        TEXT,
+        rating_id   INTEGER,
+        `read`      INTEGER DEFAULT 0,
+        created_at  TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_msg_openid ON messages(openid);
+
+    CREATE TABLE IF NOT EXISTS notifications_sent(
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        openid     TEXT,
+        rating_id  INTEGER,
+        notify_day INTEGER,
+        channel    TEXT,
+        sent_at    TEXT DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_ns_dedupe
+        ON notifications_sent(openid, rating_id, notify_day, channel);
     """)
     _migrate_users(conn)
     conn.commit()
@@ -563,6 +601,251 @@ def get_approved_users_with_notif():
         d["email"] = d["n_email"] or d["u_email"]
         out.append(d)
     return out
+
+
+# ---------------------------------------------------------------------------
+# 审计日志
+# ---------------------------------------------------------------------------
+def log_audit(actor_openid, action, target=None, detail=None):
+    conn = get_conn()
+    c = conn.cursor()
+    name = None
+    if actor_openid:
+        u = c.execute("SELECT marketer_name FROM users WHERE openid=?",
+                      (actor_openid,)).fetchone()
+        name = u["marketer_name"] if u else None
+    c.execute(
+        "INSERT INTO audit_log(actor_openid, actor_name, action, target, detail) "
+        "VALUES(?,?,?,?,?)",
+        (actor_openid, name, action, target, detail))
+    conn.commit()
+    conn.close()
+
+
+def get_audit_log(page=1, page_size=50):
+    conn = get_conn()
+    total = conn.execute("SELECT COUNT(*) AS n FROM audit_log").fetchone()["n"]
+    rows = conn.execute(
+        "SELECT * FROM audit_log ORDER BY id DESC LIMIT ? OFFSET ?",
+        (page_size, (page - 1) * page_size)).fetchall()
+    conn.close()
+    return {"total": total, "page": page, "page_size": page_size,
+            "items": [dict(r) for r in rows]}
+
+
+# ---------------------------------------------------------------------------
+# 站内消息中心
+# ---------------------------------------------------------------------------
+def add_message(openid, mtype, title, body, rating_id=None):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO messages(openid, type, title, body, rating_id) "
+        "VALUES(?,?,?,?,?)",
+        (openid, mtype, title, body, rating_id))
+    conn.commit()
+    conn.close()
+
+
+def get_messages(openid, unread_only=False, page=1, page_size=20):
+    conn = get_conn()
+    where = "WHERE openid=?" + (" AND `read`=0" if unread_only else "")
+    total = conn.execute(
+        f"SELECT COUNT(*) AS n FROM messages {where}", (openid,)).fetchone()["n"]
+    rows = conn.execute(
+        f"SELECT * FROM messages {where} ORDER BY id DESC LIMIT ? OFFSET ?",
+        (openid, page_size, (page - 1) * page_size)).fetchall()
+    unread = conn.execute(
+        "SELECT COUNT(*) AS n FROM messages WHERE openid=? AND `read`=0",
+        (openid,)).fetchone()["n"]
+    conn.close()
+    return {"total": total, "unread": unread, "page": page,
+            "page_size": page_size, "items": [dict(r) for r in rows]}
+
+
+def mark_message_read(openid, msg_id=None):
+    conn = get_conn()
+    c = conn.cursor()
+    if msg_id:
+        c.execute("UPDATE messages SET `read`=1 WHERE openid=? AND id=?",
+                  (openid, msg_id))
+    else:
+        c.execute("UPDATE messages SET `read`=1 WHERE openid=?", (openid,))
+    conn.commit()
+    conn.close()
+
+
+def unread_count(openid):
+    conn = get_conn()
+    n = conn.execute(
+        "SELECT COUNT(*) AS n FROM messages WHERE openid=? AND `read`=0",
+        (openid,)).fetchone()["n"]
+    conn.close()
+    return n
+
+
+# ---------------------------------------------------------------------------
+# 推送去重（避免定时任务每日重复发送）
+# ---------------------------------------------------------------------------
+def already_sent(openid, rating_id, notify_day, channel):
+    conn = get_conn()
+    n = conn.execute(
+        "SELECT COUNT(*) AS n FROM notifications_sent "
+        "WHERE openid=? AND rating_id=? AND notify_day=? AND channel=?",
+        (openid, rating_id, notify_day, channel)).fetchone()["n"]
+    conn.close()
+    return n > 0
+
+
+def mark_sent(openid, rating_id, notify_day, channel):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        "INSERT INTO notifications_sent(openid, rating_id, notify_day, channel) "
+        "VALUES(?,?,?,?)", (openid, rating_id, notify_day, channel))
+    conn.commit()
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# 预警阈值（提前 N 天提醒）
+# ---------------------------------------------------------------------------
+def get_notify_days(openid):
+    n = get_notif(openid)
+    if n and n.get("notify_days"):
+        try:
+            return json.loads(n["notify_days"])
+        except Exception:
+            pass
+    return [30, 7]
+
+
+def set_notify_days(openid, days):
+    conn = get_conn()
+    c = conn.cursor()
+    existing = c.execute(
+        "SELECT * FROM user_notif WHERE openid=?", (openid,)).fetchone()
+    js = json.dumps(days, ensure_ascii=False)
+    if existing:
+        c.execute(
+            "UPDATE user_notif SET notify_days=?, updated_at=datetime('now') "
+            "WHERE openid=?", (js, openid))
+    else:
+        c.execute(
+            "INSERT INTO user_notif(openid, notify_days) VALUES(?,?)",
+            (openid, js))
+    conn.commit()
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# 续期 / 重评闭环
+# ---------------------------------------------------------------------------
+def mark_renewed(rating_id, openid=None, new_expiry=None):
+    conn = get_conn()
+    c = conn.cursor()
+    if openid:
+        c.execute(
+            "UPDATE final_ratings SET renewed=1, renewed_at=datetime('now') "
+            "WHERE id=? AND openid=?", (rating_id, openid))
+    else:
+        c.execute(
+            "UPDATE final_ratings SET renewed=1, renewed_at=datetime('now') "
+            "WHERE id=?", (rating_id,))
+    conn.commit()
+    conn.close()
+
+
+# ---------------------------------------------------------------------------
+# 搜索 / 排序 / 分页查询
+# ---------------------------------------------------------------------------
+def query_my_ratings(openid, status_filter=None, q=None, sort="status",
+                     page=1, page_size=50, include_renewed=False):
+    conn = get_conn()
+    base = "FROM final_ratings WHERE openid=?"
+    params = [openid]
+    clause = ""
+    if not include_renewed:
+        clause += " AND (renewed IS NULL OR renewed=0)"
+    if status_filter:
+        clause += " AND status=?"
+        params.append(status_filter)
+    if q:
+        clause += " AND (subject LIKE ? OR contract_no LIKE ?)"
+        params.extend([f"%{q}%", f"%{q}%"])
+    order = {
+        "status": "ORDER BY (status!='overdue'), expiry_date",
+        "expiry_asc": "ORDER BY expiry_date ASC",
+        "expiry_desc": "ORDER BY expiry_date DESC",
+        "subject": "ORDER BY subject ASC",
+    }.get(sort, "ORDER BY (status!='overdue'), expiry_date")
+    total = conn.execute(
+        f"SELECT COUNT(*) AS n {base} {clause}", params).fetchone()["n"]
+    rows = conn.execute(
+        f"SELECT * {base} {clause} {order} LIMIT ? OFFSET ?",
+        params + [page_size, (page - 1) * page_size]).fetchall()
+    conn.close()
+    return {"total": total, "page": page, "page_size": page_size,
+            "items": [dict(r) for r in rows]}
+
+
+def overview_excluding_renewed():
+    """管理员总览：已续期/已重评的评级不计入未结存量。"""
+    conn = get_conn()
+    by_status = conn.execute(
+        "SELECT status, COUNT(*) AS n FROM final_ratings "
+        "WHERE renewed=0 OR renewed IS NULL GROUP BY status").fetchall()
+    total = conn.execute(
+        "SELECT COUNT(*) AS n FROM final_ratings "
+        "WHERE renewed=0 OR renewed IS NULL").fetchone()["n"]
+    by_marketer = conn.execute(
+        "SELECT openid, status, COUNT(*) AS n FROM final_ratings "
+        "WHERE renewed=0 OR renewed IS NULL GROUP BY openid, status").fetchall()
+    unassigned = conn.execute(
+        "SELECT COUNT(*) AS n FROM final_ratings "
+        "WHERE (renewed=0 OR renewed IS NULL) AND attribution='unassigned'"
+        ).fetchone()["n"]
+    conn.close()
+    bs = {r["status"]: r["n"] for r in by_status}
+    mkt = {}
+    for r in by_marketer:
+        mkt.setdefault(r["openid"], {})[r["status"]] = r["n"]
+    return {"total": total, "by_status": bs, "unassigned": unassigned,
+            "by_marketer": mkt}
+
+
+def calendar_expiry(openid=None, months=6):
+    """按到期日聚合，用于日历热力图。返回 {start,end,days:{date:{status:count}}}。"""
+    from datetime import date, timedelta
+    import calendar as _cal
+    conn = get_conn()
+    today = date.today()
+    start = today.replace(day=1)
+    y, m = start.year, start.month
+    for _ in range(months):
+        m += 1
+        if m > 12:
+            y += 1
+            m = 1
+    end = date(y, m, 1)
+    sql = ("SELECT expiry_date, status, COUNT(*) AS n FROM final_ratings "
+           "WHERE renewed=0 OR renewed IS NULL")
+    params = []
+    if openid:
+        sql += " AND openid=?"
+        params.append(openid)
+    sql += " GROUP BY expiry_date, status"
+    rows = conn.execute(sql, params).fetchall()
+    conn.close()
+    days = {}
+    for r in rows:
+        if not r["expiry_date"]:
+            continue
+        d = days.setdefault(r["expiry_date"], {"overdue": 0, "due": 0,
+                                               "upcoming": 0})
+        if r["status"] in d:
+            d[r["status"]] = r["n"]
+    return {"start": start.isoformat(), "end": end.isoformat(), "days": days}
 
 
 # ---------------------------------------------------------------------------

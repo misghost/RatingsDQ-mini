@@ -171,3 +171,61 @@ server {
 - 网页版**不依赖微信**，部署在任意服务器即可，不受小程序审核/类目限制。
 - 同一后端、同一数据库：若你既想要小程序又想要网页，**建议两者用不同的 `RATING_DB` 或不同的服务器**，避免身份体系混用（小程序 openid 来自微信、网页 openid 来自姓名，两套标识不互通）。
 - 小程序需要的 `WX_APPID/WX_SECRET`、`服务器域名白名单` 等，在网页版里**不需要**。
+
+---
+
+## 七、本轮新增能力（P0–P3 优化）
+
+### P0 · 安全与可靠
+- **强管理员口令**：`ADMIN_PASSWORD` 环境变量（生产已设为 24 位字母数字强口令）。登录管理后台必须校验，错误返回 `401`。
+- **HTTPS**：nginx 监听 443（自签名证书 `/etc/ssl/rating/`），80 强制 301 跳转 443。
+- **每日自动备份**：`rating-backup.timer` 每日 03:00 执行 `backup_db.sh`，副本存于 `/var/backups/rating/rating.db.YYYY-MM-DD_HHMMSS`，保留最近 30 份，写入前做完整性校验。
+- **操作审计**：新增 `audit_log` 表，记录登录 / 注册 / 审核 / 上传 / 提醒发送等关键动作，管理员可在「审计日志」卡片查看（`/api/admin/audit`）。
+
+### P1 · 自动提醒
+- **定时推送**：`rating-scheduler.timer` 每日 09:00 调用 `scheduler.py once` → `dispatch_notifications()`，自动扫描所有已审核市场人员的临期/过期评级并推送。
+- **站内消息中心**：无论是否配置邮件/微信，系统始终为每个命中用户创建站内消息（`messages` 表），前端右上角铃铛显示未读角标。
+- **可配置预警阈值**：用户自行设置「提前 N 天」提醒（`notify_days`，默认 `[30,7]`）。
+
+### P2 · 体验与数据
+- **搜索 / 排序 / 分页**：我的提醒支持按客户名 / 合同号搜索，按状态、到期日、客户名排序，服务端分页。
+- **日历热力**：未来 6 个月到期分布热力图（`/api/my/calendar`）。
+- **CSV 导出**：我的清单 `/api/export/my`、全员清单 `/api/export/admin`（UTF-8-SIG，Excel 直接打开）。
+- **续期闭环**：对已续期/已重评的评级点「标记已续期」，自动从到期存量中移出（`final_ratings.renewed`）。
+
+### P3 · 小程序
+- 与网页端统一视觉设计（沉稳蓝主色、白卡、状态色、健康条）。
+- 新增**消息中心**页（tabBar 第 5 项，未读红点角标，支持单条/全部已读）。
+- 提醒设置页新增**预警阈值** day-chip 选择，与网页端一致。
+
+---
+
+## 八、运维常用命令
+
+```bash
+# 数据库备份（手动）
+/opt/rating-engine/backup_db.sh
+ls -lt /var/backups/rating/ | head
+
+# 手动触发一次提醒扫描
+cd /opt/rating-engine && set -a && . ./envfile && set +a && /opt/rating-engine/venv/bin/python scheduler.py once
+
+# 查看服务日志
+journalctl -u rating.service -n 100 --no-pager
+
+# 重启 Web 服务
+systemctl restart rating.service
+
+# 定时器状态
+systemctl list-timers 'rating-*'
+```
+
+### 环境变量（envfile）
+| 变量 | 说明 |
+| --- | --- |
+| `RATING_DB` | SQLite 文件路径（默认 `/var/lib/rating/rating.db`） |
+| `ADMIN_PASSWORD` | 管理后台口令（**生产务必强口令**） |
+| `NOTIFY_DAYS` | 默认预警阈值，逗号分隔，如 `30,7` |
+| `ENABLE_DEMO` | 是否允许「灌入演示数据」（**生产建议设为 `0`**） |
+| `SMTP_*` / `WX_*` | 邮件 / 微信订阅消息集成（留空则对应渠道禁用） |
+

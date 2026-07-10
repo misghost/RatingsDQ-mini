@@ -197,6 +197,55 @@
   .health-legend{display:flex;gap:18px;flex-wrap:wrap;margin-top:9px;font-size:11.5px;color:var(--sub)}
   .health-legend i{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;vertical-align:middle}
   .health-legend b{color:var(--ink);font-weight:700;font-variant-numeric:tabular-nums}
+
+  /* 消息中心铃铛 */
+  .bell{position:relative;width:38px;height:38px;border-radius:10px;background:rgba(255,255,255,.08);
+    display:flex;align-items:center;justify-content:center;cursor:pointer;color:#cfd6e4;transition:.15s}
+  .bell:hover{background:rgba(255,255,255,.16);color:#fff}
+  .bell .badge{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;
+    background:var(--red);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .bell .badge.hide{display:none}
+  .msg-list{display:grid;gap:10px}
+  .msg-item{border:1px solid var(--line);border-radius:12px;padding:13px 14px;background:#fff;position:relative;transition:.15s}
+  .msg-item.unread{border-left:3px solid var(--accent);background:#fafbff}
+  .msg-item .mt{font-weight:600;font-size:13.5px;color:var(--ink);padding-right:64px}
+  .msg-item .mb{font-size:12.5px;color:var(--sub);margin-top:5px;line-height:1.6}
+  .msg-item .md{font-size:11px;color:var(--grey);margin-top:6px}
+  .msg-item .dotun{position:absolute;top:15px;right:14px;width:9px;height:9px;border-radius:50%;background:var(--accent)}
+  .msg-item .mk{position:absolute;top:13px;right:12px;font-size:12px;color:var(--primary);cursor:pointer;font-weight:600}
+  .msg-item .mk:hover{text-decoration:underline}
+
+  /* 搜索 / 排序 / 分页 */
+  .searchbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:4px 0 14px}
+  .searchbar input[type=text]{flex:1;min-width:150px;padding:9px 13px;border:1.5px solid var(--line);border-radius:10px;background:#fbfcfe;font-size:13px;transition:.15s}
+  .searchbar input[type=text]:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 4px rgba(47,84,235,.1);background:#fff}
+  .searchbar select{padding:9px 10px;border:1.5px solid var(--line);border-radius:10px;background:#fbfcfe;font-size:13px;color:var(--txt)}
+  .pager{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:14px;font-size:13px;color:var(--sub)}
+  .pager button{background:#f1f3f7;border:1px solid var(--line);border-radius:8px;padding:6px 15px;font-size:13px;font-weight:600;color:var(--txt);transition:.15s}
+  .pager button:hover:not(:disabled){background:#e9edf3}
+  .pager button:disabled{opacity:.45;cursor:not-allowed}
+
+  /* 日历热力 */
+  .cal{display:grid;gap:20px}
+  .cal-block{background:#fafbfe;border:1px solid var(--line);border-radius:14px;padding:14px}
+  .cal-month{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:10px}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+  .cal-grid .dow{font-size:10.5px;color:var(--grey);text-align:center;padding-bottom:2px}
+  .cal-cell{aspect-ratio:1/1;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--sub);background:#f4f6fa;border:1px solid var(--line)}
+  .cal-cell.has{font-weight:600;color:var(--ink)}
+  .cal-cell.lv1{background:#eaf3ff;border-color:#cfe0ff}
+  .cal-cell.lv2{background:#bcd6ff;border-color:#9cc0ff}
+  .cal-cell.lv3{background:#ffd9c2;border-color:#ffbf9e}
+  .cal-cell.lv4{background:#ff9d7a;border-color:#ff7e57;color:#fff}
+  .cal-cell.empty{visibility:hidden}
+
+  /* 预警阈值 chips + 续期 */
+  .day-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+  .day-chip{padding:7px 14px;border-radius:20px;background:#f1f3f7;color:var(--sub);font-size:13px;font-weight:600;cursor:pointer;border:1px solid transparent;transition:.15s}
+  .day-chip.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .r .renewed{position:absolute;top:15px;right:15px;font-size:11.5px;padding:4px 11px;border-radius:7px;background:var(--green-soft);color:var(--green-ink);font-weight:600}
+  .r.renewed{border-left-color:var(--green);opacity:.85}
+  .r .act{margin-top:11px;display:flex;gap:8px}
 </style>
 </head>
 <body>
@@ -220,6 +269,10 @@
     <span class="wm"><b>评级到期提醒</b><small>RATING EXPIRY CONSOLE</small></span>
   </div>
   <div class="whoami hide" id="whoami">
+    <button class="bell" id="bellBtn" onclick="openMessages()" title="消息中心">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="badge hide" id="bellBadge">0</span>
+    </button>
     <span class="role-pill" id="rolePill">市场人员</span>
     <span id="nameText"></span>
     <button class="btn-logout" onclick="logout()">退出</button>
@@ -297,7 +350,11 @@
   <div class="card">
     <div class="toolbar">
       <h2 style="margin:0">我的到期提醒</h2>
-      <button class="link" onclick="loadMy()">🔄 刷新</button>
+      <div style="display:flex;gap:8px">
+        <button class="link" onclick="exportMy()">⬇ 导出</button>
+        <button class="link" onclick="printMy()">🖨 打印</button>
+        <button class="link" onclick="loadMy()">🔄 刷新</button>
+      </div>
     </div>
     <div class="stat" id="myStat" style="margin-top:14px"></div>
     <div class="health" id="myHealth"></div>
@@ -317,7 +374,29 @@
       <span><i class="dot" style="background:var(--orange)"></i>即将到期(3月内)</span>
       <span><i class="dot" style="background:var(--green)"></i>有效期内</span>
     </div>
+    <div class="searchbar">
+      <input type="text" id="mySearch" placeholder="搜索客户名称 / 合同号…" oninput="onMySearch()">
+      <select id="mySort" onchange="setSort(this.value)">
+        <option value="status">按状态</option>
+        <option value="expiry_asc">到期日 近→远</option>
+        <option value="expiry_desc">到期日 远→近</option>
+        <option value="subject">按客户名</option>
+      </select>
+    </div>
     <div class="ratings" id="myRatings"></div>
+    <div class="pager" id="myPager" style="display:none">
+      <button id="myPrev" onclick="turnPage(-1)">上一页</button>
+      <span id="myPageInfo"></span>
+      <button id="myNext" onclick="turnPage(1)">下一页</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <h2 style="margin:0">到期日历分布 <span class="badge">热力</span></h2>
+      <button class="link" onclick="renderCalendar()">加载日历</button>
+    </div>
+    <div class="cal" id="calBox"><div class="empty">点击「加载日历」查看未来 6 个月到期分布</div></div>
   </div>
 
   <div class="card">
@@ -365,6 +444,8 @@
       <label>邮箱地址</label>
       <input id="notifEmail" type="email" placeholder="name@company.com" autocomplete="off">
     </div>
+    <div class="sec-title">预警阈值（提前 N 天提醒）</div>
+    <div class="day-chips" id="dayChips"></div>
     <div style="display:flex;gap:10px;margin-top:6px">
       <button class="btn" onclick="saveNotification()">保存提醒设置</button>
       <button class="btn grey" onclick="testNotification()">发送测试提醒</button>
@@ -378,7 +459,10 @@
   <div class="card">
     <div class="toolbar">
       <h2 style="margin:0">全员总览 <span class="badge">管理员</span></h2>
-      <button class="link" onclick="loadOverview()">🔄 刷新</button>
+      <div style="display:flex;gap:8px">
+        <button class="link" onclick="exportAdmin()">⬇ 导出全员</button>
+        <button class="link" onclick="loadOverview()">🔄 刷新</button>
+      </div>
     </div>
     <div class="stat" id="ovStat" style="margin-top:14px"></div>
     <div class="sec-title">按市场人员下钻（点击查看明细）</div>
@@ -389,6 +473,20 @@
       </table>
     </div>
     <div class="msg" id="ovMsg"></div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <h2 style="margin:0">操作审计 <span class="badge">日志</span></h2>
+      <button class="link" onclick="loadAudit()">🔄 刷新</button>
+    </div>
+    <div class="tbl-wrap">
+      <table id="auditTable">
+        <thead><tr><th>时间</th><th>操作人</th><th>动作</th><th>对象</th><th>详情</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="msg" id="auditMsg"></div>
   </div>
 
   <div class="card">
@@ -422,7 +520,24 @@
       <h3 id="modalTitle" style="margin:0">明细</h3>
       <button class="link" onclick="closeModal()">关闭</button>
     </div>
+    <div class="searchbar" style="margin-bottom:12px">
+      <input type="text" id="drillSearch" placeholder="搜索该市场人员客户…" oninput="onDrillSearch()">
+    </div>
     <div class="ratings" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- 消息中心 -->
+<div class="modal-mask hide" id="msgMask" onclick="if(event.target===this)closeMsg()">
+  <div class="modal">
+    <div class="toolbar" style="margin-bottom:12px">
+      <h3 style="margin:0">消息中心</h3>
+      <div style="display:flex;gap:8px">
+        <button class="link" onclick="markAllRead()">全部已读</button>
+        <button class="link" onclick="closeMsg()">关闭</button>
+      </div>
+    </div>
+    <div class="msg-list" id="msgList"></div>
   </div>
 </div>
 
@@ -594,6 +709,9 @@ async function loadNotification(){
   document.getElementById("swEmail").classList.toggle("on", NOTIF.email);
   document.getElementById("notifEmail").value = NOTIF_EMAIL;
   document.getElementById("emailField").style.display = NOTIF.email ? "block" : "none";
+  // 预警阈值（提前 N 天）
+  if(Array.isArray(r.body.notify_days) && r.body.notify_days.length) NOTIFY_DAYS = r.body.notify_days;
+  renderDayChips();
 }
 async function saveNotification(){
   const ch=[];
@@ -602,7 +720,7 @@ async function saveNotification(){
   const email = document.getElementById("notifEmail").value.trim();
   const m=document.getElementById("notifMsg");
   if(ch.indexOf("email")>=0 && !email){ m.className="msg err"; m.textContent="启用邮件提醒需填写邮箱地址"; return; }
-  const r = await api("/api/my/notification", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ channels:ch, email }) });
+  const r = await api("/api/my/notification", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ channels:ch, email, notify_days: NOTIFY_DAYS }) });
   if(r.status===200){ m.className="msg ok"; m.textContent="✅ 提醒设置已保存"; }
   else { m.className="msg err"; m.textContent="❌ "+(r.body.error||"保存失败"); }
 }
@@ -664,6 +782,7 @@ function render(){
       loadMy();
       loadNotification();
     }
+    refreshBell();
   }
 }
 
@@ -676,18 +795,29 @@ function setFilter(s){
 async function loadMy(){
   const el=document.getElementById("myRatings");
   el.innerHTML='<div class="empty">加载中…</div>';
-  const q = CUR_FILTER ? ("?status="+CUR_FILTER) : "";
+  let q=`?sort=${encodeURIComponent(CUR_SORT)}&page=${CUR_PAGE}&page_size=${CUR_PAGE_SIZE}`;
+  if(CUR_FILTER) q+=`&status=${CUR_FILTER}`;
+  if(CUR_Q) q+=`&q=${encodeURIComponent(CUR_Q)}`;
   const r = await api("/api/my/ratings"+q);
   if(r.status===403){ logout(); return; }
   if(r.status!==200){ el.innerHTML=`<div class="empty">加载失败：${r.body.error||r.status}</div>`; return; }
-  // 统计（总是拉全量算各态）
   await loadMyStat();
+  CUR_TOTAL = r.body.total||0;
   const list = r.body.ratings||[];
   if(!list.length){
-    el.innerHTML='<div class="empty">暂无'+(CUR_FILTER?ST_LABEL[CUR_FILTER]:"")+'记录。<br>可上传「合同管理.xlsx」绑定归属，或等管理员上传后台数据后重算。</div>';
+    el.innerHTML='<div class="empty">暂无'+(CUR_FILTER?ST_LABEL[CUR_FILTER]:"")+'记录'+(CUR_Q?('匹配「'+esc(CUR_Q)+'」'):'')+'。<br>可上传「合同管理.xlsx」绑定归属，或等管理员上传后台数据后重算。</div>';
+    document.getElementById("myPager").style.display="none";
     return;
   }
   el.innerHTML = renderCards(list);
+  const totalPages=Math.max(1,Math.ceil(CUR_TOTAL/CUR_PAGE_SIZE));
+  const pg=document.getElementById("myPager");
+  if(CUR_TOTAL>CUR_PAGE_SIZE){
+    pg.style.display="flex";
+    document.getElementById("myPageInfo").textContent=`第 ${CUR_PAGE} / ${totalPages} 页（共 ${CUR_TOTAL} 条）`;
+    document.getElementById("myPrev").disabled = CUR_PAGE<=1;
+    document.getElementById("myNext").disabled = CUR_PAGE>=totalPages;
+  } else pg.style.display="none";
 }
 async function loadMyStat(){
   const r = await api("/api/my/ratings");
@@ -720,16 +850,20 @@ async function loadMyStat(){
 function renderCards(list){
   const rs=[...list].sort((a,b)=>(ST_ORDER[a.status]-ST_ORDER[b.status]) || (a.expiry_date>b.expiry_date?1:-1));
   return rs.map(r=>{
+    const renewed = r.renewed && r.renewed!=0 && r.renewed!=="0";
     const attr = r.attribution==="contract_join" ? "合同号精准匹配"
                : (r.attribution&&r.attribution.indexOf("window")>=0 ? "时间窗口兜底" : "—");
-    return `<div class="r ${r.status}">
-      <span class="st ${r.status}">${ST_LABEL[r.status]||r.status}</span>
+    const statusLabel = renewed ? "已续期/已重评" : (ST_LABEL[r.status]||r.status);
+    const badgeCls = renewed ? "renewed" : r.status;
+    const action = renewed ? "" : `<div class="act"><button class="btn sm grey" onclick="renewRating(${r.id})">标记已续期</button></div>`;
+    return `<div class="r ${renewed?'renewed':r.status}">
+      <span class="st ${badgeCls}">${statusLabel}</span>
       <div class="name">${esc(r.subject)}</div>
       <div class="meta">
         合同号：${esc(r.contract_no)||"—"}　${daysText(r.expiry_date,r.status)}<br>
         到期日：<b>${r.expiry_date||"—"}</b>　提醒日：${r.remind_date||"—"}<br>
         类型：${esc(r.debt_type)||"—"}${r.project_type?" ｜ "+esc(r.project_type):""} ｜ 归属：${attr}
-      </div></div>`;
+      </div>${action}</div>`;
   }).join("");
 }
 
@@ -798,14 +932,25 @@ async function loadOverview(){
     tb.appendChild(tr);
   }
 }
+let DRILL_LIST=[];
 async function drill(oid,name){
   const r=await api("/api/admin/marketer?openid="+encodeURIComponent(oid));
   document.getElementById("modalTitle").textContent=name+" · 明细";
-  const body=document.getElementById("modalBody");
-  if(r.status!==200){ body.innerHTML=`<div class="empty">${r.body.error||"加载失败"}</div>`; }
-  else { const list=r.body.ratings||[]; body.innerHTML = list.length?renderCards(list):'<div class="empty">该市场人员暂无归属记录</div>'; }
+  document.getElementById("drillSearch").value="";
+  DRILL_LIST = (r.status===200) ? (r.body.ratings||[]) : [];
+  renderDrill();
   document.getElementById("modalMask").classList.remove("hide");
 }
+function renderDrill(){
+  const body=document.getElementById("modalBody");
+  const q=(document.getElementById("drillSearch").value||"").trim().toLowerCase();
+  const list = q ? DRILL_LIST.filter(x=>(x.subject||"").toLowerCase().includes(q) || (x.contract_no||"").toLowerCase().includes(q)) : DRILL_LIST;
+  if(!list.length){ body.innerHTML='<div class="empty">该市场人员暂无匹配记录</div>'; return; }
+  let html = renderCards(list);
+  if(q) html = `<div class="empty" style="margin-bottom:8px">匹配「${esc(q)}」共 ${list.length} 条</div>`+html;
+  body.innerHTML = html;
+}
+function onDrillSearch(){ renderDrill(); }
 function closeModal(){ document.getElementById("modalMask").classList.add("hide"); }
 
 async function uploadAdmin(){
@@ -833,6 +978,154 @@ async function seedDemo(){
   const r=await api("/api/demo/seed",{method:"POST"});
   if(r.status===200){ m.className="msg ok"; m.textContent="✅ 演示数据已灌入"; loadOverview(); }
   else{ m.className="msg err"; m.textContent="❌ "+(r.body.error||JSON.stringify(r.body)); }
+}
+
+/* ---------- 站内消息中心 ---------- */
+let MSG_UNREAD = 0;
+async function refreshBell(){
+  if(!OPENID) return;
+  const r = await api("/api/my/messages/unread");
+  if(r.status===200){ MSG_UNREAD = r.body.unread||0; }
+  const b=document.getElementById("bellBadge");
+  if(b){ if(MSG_UNREAD>0){ b.textContent=MSG_UNREAD>99?"99+":MSG_UNREAD; b.classList.remove("hide"); }
+         else b.classList.add("hide"); }
+}
+async function openMessages(){
+  document.getElementById("msgMask").classList.remove("hide");
+  await loadMessages();
+}
+function closeMsg(){ document.getElementById("msgMask").classList.add("hide"); }
+async function loadMessages(){
+  const r = await api("/api/my/messages?page=1");
+  const box=document.getElementById("msgList");
+  if(r.status===200){
+    const items=r.body.items||[];
+    if(!items.length){ box.innerHTML='<div class="empty">暂无消息</div>'; }
+    else {
+      box.innerHTML = items.map(m=>`
+        <div class="msg-item ${m.read?'':'unread'}">
+          <div class="mt">${esc(m.title)}</div>
+          <div class="mb">${esc(m.body)}</div>
+          <div class="md">${esc(m.created_at||"")}</div>
+          ${m.read?'':'<span class="dotun"></span><span class="mk" onclick="readOne('+m.id+')">标记已读</span>'}
+        </div>`).join("");
+    }
+    MSG_UNREAD = r.body.unread||0;
+    refreshBell();
+  } else box.innerHTML=`<div class="empty">${r.body.error||"加载失败"}</div>`;
+}
+async function readOne(id){
+  await api("/api/my/messages/read",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id})});
+  loadMessages();
+}
+async function markAllRead(){
+  await api("/api/my/messages/read",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+  loadMessages();
+}
+
+/* ---------- 搜索 / 排序 / 分页 ---------- */
+let CUR_Q="", CUR_SORT="status", CUR_PAGE=1, CUR_TOTAL=0, CUR_PAGE_SIZE=20;
+function onMySearch(){ CUR_Q=document.getElementById("mySearch").value.trim(); CUR_PAGE=1; loadMy(); }
+function setSort(v){ CUR_SORT=v; CUR_PAGE=1; loadMy(); }
+function turnPage(d){ CUR_PAGE=Math.max(1,CUR_PAGE+d); loadMy(); }
+
+/* ---------- 续期闭环 ---------- */
+async function renewRating(id){
+  if(!confirm("标记为「已续期 / 已重评」后，该条将从到期存量中移出。确认？")) return;
+  const r=await api("/api/my/ratings/"+id+"/renew",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+  if(r.status===200){ loadMy(); loadMyStat(); }
+  else alert(r.body.error||"操作失败");
+}
+
+/* ---------- 预警阈值 ---------- */
+let NOTIFY_DAYS=[30,7];
+function renderDayChips(){
+  const presets=[7,15,30,60,90];
+  const box=document.getElementById("dayChips");
+  if(!box) return;
+  box.innerHTML = presets.map(d=>{
+    const on=NOTIFY_DAYS.indexOf(d)>=0;
+    return `<span class="day-chip ${on?'on':''}" onclick="toggleDay(${d})">${d} 天</span>`;
+  }).join("");
+}
+function toggleDay(d){
+  const i=NOTIFY_DAYS.indexOf(d);
+  if(i>=0) NOTIFY_DAYS.splice(i,1); else NOTIFY_DAYS.push(d);
+  NOTIFY_DAYS.sort((a,b)=>a-b);
+  renderDayChips();
+}
+
+/* ---------- 导出 / 打印 ---------- */
+function exportMy(){
+  if(!confirm("导出你的评级到期清单（CSV，可用 Excel 打开）？")) return;
+  window.open(API+"/api/export/my?openid="+encodeURIComponent(OPENID), "_blank");
+}
+function exportAdmin(){
+  if(!confirm("导出全员评级到期清单（CSV）？")) return;
+  window.open(API+"/api/export/admin?openid="+encodeURIComponent(OPENID), "_blank");
+}
+function printMy(){
+  const w=window.open("","_blank");
+  const stat=document.getElementById("myStat").innerText;
+  const cards=document.getElementById("myRatings").innerHTML;
+  w.document.write('<html><head><title>我的评级到期</title><style>body{font-family:sans-serif;padding:24px}.r{border:1px solid #ccc;border-radius:8px;padding:10px;margin:8px 0}.name{font-weight:700}</style></head><body><h2>我的评级到期提醒</h2><pre>'+stat+'</pre>'+cards+'<p style="color:#999">导出时间：'+new Date().toLocaleString()+'</p></body></html>');
+  w.document.close(); w.print();
+}
+
+/* ---------- 日历热力 ---------- */
+async function renderCalendar(){
+  const box=document.getElementById("calBox");
+  box.innerHTML='<div class="empty">加载中…</div>';
+  const r=await api("/api/my/calendar?months=6");
+  if(r.status!==200){ box.innerHTML=`<div class="empty">${r.body.error||"加载失败"}</div>`; return; }
+  const data=r.body.days||{};
+  const dows=["日","一","二","三","四","五","六"];
+  let html="";
+  const start=new Date(r.body.start+"T00:00:00");
+  const end=new Date(r.body.end+"T00:00:00");
+  let cur=new Date(start.getFullYear(),start.getMonth(),1);
+  while(cur<end){
+    const y=cur.getFullYear(), m=cur.getMonth();
+    let cells="";
+    for(let i=0;i<7;i++) cells+=`<div class="dow">${dows[i]}</div>`;
+    const first=new Date(y,m,1).getDay();
+    const dim=new Date(y,m+1,0).getDate();
+    for(let i=0;i<first;i++) cells+=`<div class="cal-cell empty"></div>`;
+    for(let dd=1;dd<=dim;dd++){
+      const key=`${y}-${String(m+1).padStart(2,"0")}-${String(dd).padStart(2,"0")}`;
+      const v=data[key];
+      let cls="cal-cell", txt=dd;
+      if(v){
+        const tot=(v.overdue||0)+(v.due||0)+(v.upcoming||0);
+        if(tot>0){ cls+=" has"; const up=v.upcoming||0, due=v.due||0, od=v.overdue||0;
+          const lvl = od>0?4 : (due>=3?3 : (due>0||up>0?2:1));
+          cls+=" lv"+lvl; }
+      }
+      cells+=`<div class="${cls}" title="${key}${v?(' 到期 '+((v.upcoming||0)+(v.due||0)+(v.overdue||0))+' 条'):''}">${txt}</div>`;
+    }
+    html+=`<div class="cal-block"><div class="cal-month">${y} 年 ${m+1} 月</div><div class="cal-grid">${cells}</div></div>`;
+    cur=new Date(y,m+1,1);
+  }
+  box.innerHTML=html;
+}
+
+/* ---------- 管理员审计 ---------- */
+async function loadAudit(){
+  const r=await api("/api/admin/audit?page=1");
+  const tb=document.querySelector("#auditTable tbody");
+  const msg=document.getElementById("auditMsg");
+  if(r.status!==200){ msg.className="msg err"; msg.textContent=r.body.error||"加载失败"; return; }
+  msg.textContent="";
+  const items=r.body.items||[];
+  if(!items.length){ tb.innerHTML='<tr><td colspan="5" class="empty">暂无审计记录</td></tr>'; return; }
+  tb.innerHTML=items.map(it=>`
+    <tr>
+      <td>${esc((it.created_at||"").replace("T"," ").slice(0,19))}</td>
+      <td>${esc(it.actor_name||it.actor_openid||"—")}</td>
+      <td><b>${esc(it.action)}</b></td>
+      <td>${esc(it.target||"—")}</td>
+      <td style="color:var(--sub)">${esc(it.detail||"")}</td>
+    </tr>`).join("");
 }
 
 /* ---------- 工具 ---------- */

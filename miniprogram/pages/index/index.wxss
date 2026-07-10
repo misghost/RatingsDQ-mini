@@ -1,5 +1,12 @@
 .loading { text-align: center; padding: 100rpx; color: #9aa0a6; }
 
+/* 搜索框 */
+.search {
+  width: 100%; padding: 18rpx 28rpx; background: #fff;
+  border: 1rpx solid #e6e8eb; border-radius: 999rpx; font-size: 26rpx;
+  box-shadow: 0 4rpx 16rpx rgba(20, 30, 50, 0.04);
+}
+
 /* 未登录欢迎页 */
 .guest-wrap { padding-bottom: 180rpx; }
 .guest-hero { padding: 60rpx 48rpx 40rpx; background: linear-gradient(135deg, #07c160, #06ad56); }

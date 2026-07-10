@@ -1,0 +1,29 @@
+<view class="wrap">
+  <!-- 未登录 -->
+  <view wx:if="{{!loggedIn}}" class="empty">
+    <view style="font-size:80rpx;margin-bottom:20rpx;">🔔</view>
+    <view style="font-size:30rpx;font-weight:600;color:#1f2329;margin-bottom:12rpx;">登录后查看消息</view>
+    <view class="muted" style="margin-bottom:40rpx;">请先登录账号，接收到期提醒与系统通知</view>
+    <button class="btn btn-primary btn-block" style="width:400rpx;" bindtap="goLogin">去登录</button>
+  </view>
+
+  <block wx:else>
+    <view class="bar" wx:if="{{unread > 0}}">
+      <text class="muted sm">您有 {{unread}} 条未读消息</text>
+      <text class="mk-all" bindtap="markAll">全部标为已读</text>
+    </view>
+
+    <view wx:if="{{loading && items.length === 0}}" class="loading">加载中…</view>
+    <view wx:elif="{{items.length === 0}}" class="empty">暂无消息</view>
+
+    <view class="msg-list">
+      <view wx:for="{{items}}" wx:key="id" class="msg-item {{item.read ? '' : 'unread'}}">
+        <view class="mt">{{item.title}}</view>
+        <view class="mb">{{item.body}}</view>
+        <view class="md">{{item.created_at_fmt}}</view>
+        <view wx:if="{{!item.read}}" class="dotun"></view>
+        <text wx:if="{{!item.read}}" class="mk" data-id="{{item.id}}" bindtap="readOne">标记已读</text>
+      </view>
+    </view>
+  </block>
+</view>

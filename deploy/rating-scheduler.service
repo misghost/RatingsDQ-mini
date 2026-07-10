@@ -1,0 +1,9 @@
+[Unit]
+Description=Rating DQ notification scheduler (single run)
+After=network.target rating.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/rating-engine
+EnvironmentFile=/opt/rating-engine/envfile
+ExecStart=/opt/rating-engine/venv/bin/python scheduler.py once

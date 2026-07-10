@@ -37,6 +37,16 @@
       <button class="btn-primary" loading="{{loading}}" bindtap="save">保存设置</button>
     </view>
 
+    <view class="card">
+      <view class="sec-title">预警阈值</view>
+      <view class="muted sm" style="margin-bottom:16rpx;">在到期前以下天数时，自动通过站内消息与已开启渠道提醒您。</view>
+      <view class="chips">
+        <view wx:for="{{dayPresets}}" wx:key="*this"
+          class="chip {{notifyDays.indexOf(item) >= 0 ? 'on' : ''}}"
+          data-d="{{item}}" bindtap="toggleDay">{{item}} 天</view>
+      </view>
+    </view>
+
     <view class="card" wx:if="{{channels.miniprogram}}">
       <view class="sec-title">小程序订阅</view>
       <view class="muted sm">微信订阅消息为一次性授权，点击下方按钮完成授权后，管理员推送时即可收到服务提醒。</view>

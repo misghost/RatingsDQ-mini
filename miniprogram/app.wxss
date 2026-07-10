@@ -1,23 +1,140 @@
+/* ============================================================
+   评级到期提醒 · 小程序设计系统（与 Web 端统一视觉语言）
+   中性底色 + 白卡 + 柔和阴影 + 状态色（红/橙/绿）
+   ============================================================ */
 page {
-  background: #f5f6f8;
-  font-family: -apple-system, "PingFang SC", Helvetica, sans-serif;
+  background: #f4f6f8;
+  font-family: -apple-system, "PingFang SC", "Helvetica Neue", Helvetica, sans-serif;
   color: #1f2329;
   font-size: 28rpx;
+  line-height: 1.55;
 }
 
+/* ---------- 配色 token（rgba 兼容，避免 CSS 变量支持差异） ---------- */
+/* 主色 #2f6bff（沉稳蓝），状态：过期 #e5484d / 即将 #f5821f / 有效 #18a058 */
+
+view, text, button, input, scroll-view { box-sizing: border-box; }
+
+/* ---------- 卡片 ---------- */
 .card {
   background: #fff;
-  border-radius: 16rpx;
-  padding: 24rpx;
+  border-radius: 24rpx;
+  padding: 28rpx;
   margin: 20rpx 24rpx;
-  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+  box-shadow: 0 4rpx 20rpx rgba(20, 30, 50, 0.05);
+}
+.card-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: #1f2329;
+  margin-bottom: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.card-sub { font-size: 24rpx; color: #8a9099; font-weight: 400; }
+
+/* ---------- 顶部 hero（登录前） ---------- */
+.hero {
+  padding: 72rpx 48rpx 56rpx;
+  background: linear-gradient(135deg, #2f6bff, #1f4fd1);
+  color: #fff;
+}
+.hero .brand { font-size: 46rpx; font-weight: 700; letter-spacing: 1rpx; }
+.hero .desc {
+  font-size: 26rpx; color: rgba(255, 255, 255, 0.86);
+  margin-top: 20rpx; line-height: 1.7;
 }
 
-.muted { color: #9aa0a6; }
-.sm { font-size: 24rpx; }
+/* ---------- 统计宫格 ---------- */
+.stat-grid {
+  display: flex;
+  background: #fff;
+  margin: 20rpx 24rpx;
+  border-radius: 24rpx;
+  padding: 28rpx 0;
+  box-shadow: 0 4rpx 20rpx rgba(20, 30, 50, 0.05);
+}
+.stat { flex: 1; text-align: center; position: relative; }
+.stat + .stat::before {
+  content: ""; position: absolute; left: 0; top: 14rpx; bottom: 14rpx;
+  width: 1rpx; background: #eef0f3;
+}
+.stat .n { display: block; font-size: 44rpx; font-weight: 700; }
+.stat .l { font-size: 22rpx; color: #8a9099; margin-top: 4rpx; }
 
+/* ---------- 筛选 / 标签 chips ---------- */
+.chips { display: flex; flex-wrap: wrap; margin: 4rpx 24rpx 8rpx; }
+.chip {
+  font-size: 26rpx; color: #5a6066; background: #fff;
+  padding: 14rpx 28rpx; margin: 0 16rpx 16rpx 0;
+  border-radius: 999rpx; border: 1rpx solid #e6e8eb;
+}
+.chip.on { color: #2f6bff; font-weight: 600; background: #eaf1ff; border-color: #cfe0ff; }
+
+/* ---------- 健康条 ---------- */
+.health { display: flex; height: 16rpx; border-radius: 999rpx; overflow: hidden; background: #eef0f3; margin: 16rpx 24rpx; }
+.health .seg.overdue { background: #e5484d; }
+.health .seg.due { background: #f5821f; }
+.health .seg.upcoming { background: #18a058; }
+.health-legend { display: flex; justify-content: center; gap: 32rpx; font-size: 22rpx; color: #8a9099; margin: 0 24rpx 8rpx; }
+.health-legend i { display: inline-block; width: 16rpx; height: 16rpx; border-radius: 4rpx; margin-right: 8rpx; vertical-align: -2rpx; }
+
+/* ---------- 评级卡片 ---------- */
+.rating { padding: 24rpx 28rpx; }
+.rating-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14rpx; }
+.rating .subject { font-size: 30rpx; font-weight: 600; flex: 1; padding-right: 16rpx; }
+.rating .row { display: flex; font-size: 26rpx; padding: 8rpx 0; }
+.rating .k { color: #8a9099; width: 130rpx; flex-shrink: 0; }
+.rating .v { color: #1f2329; flex: 1; }
+.rating.renewed { opacity: 0.62; }
+
+/* 状态标签 */
+.tag {
+  font-size: 22rpx; font-weight: 600; padding: 6rpx 16rpx; border-radius: 999rpx;
+  white-space: nowrap;
+}
+
+/* ---------- 按钮 ---------- */
 button::after { border: none; }
-.btn-primary {
-  background: #07c160;
-  color: #fff;
+.btn {
+  height: 84rpx; line-height: 84rpx; border-radius: 999rpx;
+  font-size: 30rpx; font-weight: 600; text-align: center; padding: 0;
+}
+.btn-primary { background: #2f6bff; color: #fff; }
+.btn-primary[disabled] { background: #b9c7e8; color: #fff; }
+.btn-ghost { background: #fff; color: #2f6bff; border: 1rpx solid #2f6bff; }
+.btn-grey { background: #eef0f3; color: #1f2329; }
+.btn-block { width: 100%; }
+
+/* ---------- 消息中心 ---------- */
+.msg-list { margin: 16rpx 24rpx; }
+.msg-item {
+  background: #fff; border-radius: 20rpx; padding: 24rpx 28rpx;
+  margin-bottom: 16rpx; box-shadow: 0 4rpx 16rpx rgba(20, 30, 50, 0.04);
+  position: relative;
+}
+.msg-item.unread { background: #f5f9ff; }
+.msg-item .mt { font-size: 28rpx; font-weight: 600; color: #1f2329; padding-right: 24rpx; }
+.msg-item .mb { font-size: 25rpx; color: #5a6066; margin-top: 10rpx; line-height: 1.6; }
+.msg-item .md { font-size: 22rpx; color: #aab0b8; margin-top: 12rpx; }
+.msg-item .dotun {
+  position: absolute; top: 28rpx; right: 28rpx;
+  width: 16rpx; height: 16rpx; border-radius: 50%; background: #e5484d;
+}
+.msg-item .mk {
+  position: absolute; bottom: 24rpx; right: 28rpx;
+  font-size: 24rpx; color: #2f6bff;
+}
+
+/* ---------- 通用 ---------- */
+.muted { color: #8a9099; }
+.sm { font-size: 24rpx; }
+.empty { text-align: center; color: #aab0b8; padding: 90rpx 40rpx; font-size: 26rpx; }
+.loading { text-align: center; padding: 110rpx; color: #8a9099; }
+.section-gap { height: 16rpx; }
+.badge {
+  min-width: 32rpx; height: 32rpx; line-height: 32rpx; padding: 0 8rpx;
+  background: #e5484d; color: #fff; font-size: 20rpx; border-radius: 999rpx;
+  text-align: center;
 }

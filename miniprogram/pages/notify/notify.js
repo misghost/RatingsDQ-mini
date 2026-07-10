@@ -8,7 +8,9 @@ Page({
     wx_subscribed: 0,
     loading: false,
     msg: '',
-    canMiniprogram: true
+    canMiniprogram: true,
+    dayPresets: [7, 15, 30, 60, 90],
+    notifyDays: [30, 7]
   },
 
   onShow() {
@@ -21,13 +23,15 @@ Page({
     get('/api/my/notification')
       .then((d) => {
         const ch = d.channels || [];
+        const nd = (Array.isArray(d.notify_days) && d.notify_days.length) ? d.notify_days : this.data.notifyDays;
         this.setData({
           channels: {
             miniprogram: ch.indexOf('miniprogram') >= 0,
             email: ch.indexOf('email') >= 0
           },
           email: d.email || '',
-          wx_subscribed: d.wx_subscribed || 0
+          wx_subscribed: d.wx_subscribed || 0,
+          notifyDays: nd.slice().sort((a, b) => a - b)
         });
       })
       .catch(() => {});
@@ -51,6 +55,15 @@ Page({
     this.setData({ email: e.detail.value });
   },
 
+  toggleDay(e) {
+    const d = Number(e.currentTarget.dataset.d);
+    const arr = this.data.notifyDays.slice();
+    const i = arr.indexOf(d);
+    if (i >= 0) arr.splice(i, 1); else arr.push(d);
+    arr.sort((a, b) => a - b);
+    this.setData({ notifyDays: arr });
+  },
+
   save() {
     const ch = [];
     if (this.data.channels.miniprogram) ch.push('miniprogram');
@@ -59,8 +72,12 @@ Page({
       this.setData({ msg: '启用邮件提醒需填写邮箱地址' });
       return;
     }
+    if (this.data.notifyDays.length === 0) {
+      this.setData({ msg: '请至少选择一个预警阈值' });
+      return;
+    }
     this.setData({ loading: true, msg: '' });
-    post('/api/my/notification', { channels: ch, email: this.data.email })
+    post('/api/my/notification', { channels: ch, email: this.data.email, notify_days: this.data.notifyDays })
       .then(() => { this.setData({ loading: false, msg: '设置已保存' }); })
       .catch((err) => {
         this.setData({ loading: false, msg: (err && err.error) || '保存失败' });
