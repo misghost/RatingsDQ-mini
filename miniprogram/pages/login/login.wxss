@@ -1,0 +1,21 @@
+.login-wrap { padding: 120rpx 48rpx 60rpx; }
+.logo { font-size: 48rpx; font-weight: 600; text-align: center; }
+.sub { color: #9aa0a6; text-align: center; margin-top: 16rpx; font-size: 26rpx; }
+.role-card { margin-top: 60rpx; }
+.role-row { display: flex; justify-content: space-between; align-items: center; }
+.sm { font-size: 24rpx; margin-top: 12rpx; }
+.login-btn {
+  margin-top: 80rpx;
+  border-radius: 48rpx;
+  font-size: 32rpx;
+  height: 88rpx;
+  line-height: 88rpx;
+}
+.err-banner {
+  margin-top: 30rpx; padding: 16rpx 24rpx;
+  background: #fff3e0; border-radius: 12rpx;
+  border-left: 6rpx solid #ff976a;
+}
+.err-banner text { font-size: 24rpx; color: #e65100; line-height: 1.5; }
+.skip-row { margin-top: 40rpx; text-align: center; }
+.skip-text { font-size: 28rpx; color: #9aa0a6; }

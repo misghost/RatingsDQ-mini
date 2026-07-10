@@ -1,0 +1,62 @@
+.wrap { padding: 24rpx; }
+.deny { text-align: center; color: #9aa0a6; padding: 120rpx 40rpx; }
+
+/* 未登录提示 */
+.need-login {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 120rpx 48rpx;
+}
+.nl-icon { font-size: 80rpx; margin-bottom: 20rpx; }
+.nl-title { font-size: 32rpx; font-weight: 600; color: #1f2329; margin-bottom: 12rpx; }
+.nl-desc { font-size: 26rpx; color: #9aa0a6; margin-bottom: 40rpx; text-align: center; }
+.btn-go-login {
+  width: 400rpx; height: 80rpx; line-height: 80rpx;
+  border-radius: 48rpx; font-size: 30rpx;
+  background: #07c160; color: #fff;
+}
+
+.ov-card { background: #fff; border-radius: 16rpx; padding: 24rpx; }
+.ov-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 14rpx 0;
+  font-size: 28rpx;
+  border-bottom: 1rpx solid #f0f1f2;
+}
+.strong { font-weight: 600; }
+
+.sec-title { font-size: 28rpx; font-weight: 600; margin: 24rpx 8rpx 12rpx; }
+
+.mkt-top { display: flex; justify-content: space-between; align-items: center; }
+.name { font-size: 30rpx; font-weight: 600; }
+.total { font-size: 26rpx; color: #9aa0a6; }
+.mkt-stats { display: flex; justify-content: space-between; margin-top: 12rpx; font-size: 24rpx; }
+
+.back { color: #07c160; padding: 16rpx 8rpx; font-size: 28rpx; }
+.empty { text-align: center; color: #9aa0a6; padding: 80rpx; }
+
+.subject { font-size: 30rpx; font-weight: 600; margin-bottom: 8rpx; }
+.row { display: flex; justify-content: space-between; padding: 6rpx 0; font-size: 26rpx; }
+.k { color: #9aa0a6; }
+.v { color: #1f2329; }
+
+/* 用户审核 */
+.badge {
+  font-size: 22rpx; color: #fff; background: #ff976a;
+  border-radius: 20rpx; padding: 2rpx 12rpx; margin-left: 12rpx;
+}
+.pending { padding: 24rpx; }
+.p-top { display: flex; justify-content: space-between; align-items: baseline; }
+.p-top .name { font-size: 30rpx; font-weight: 600; }
+.p-top .org { font-size: 24rpx; color: #9aa0a6; }
+.p-row { display: flex; justify-content: space-between; font-size: 26rpx; padding: 6rpx 0; }
+.p-actions { display: flex; gap: 20rpx; margin-top: 16rpx; }
+.btn-approve {
+  flex: 1; height: 72rpx; line-height: 72rpx; font-size: 28rpx;
+  border-radius: 40rpx; background: #07c160; color: #fff;
+}
+.btn-reject {
+  flex: 1; height: 72rpx; line-height: 72rpx; font-size: 28rpx;
+  border-radius: 40rpx; background: #fff; color: #e54d42;
+  border: 1rpx solid #e54d42;
+}

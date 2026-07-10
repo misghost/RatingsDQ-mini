@@ -1,0 +1,42 @@
+<view class="reg-wrap">
+  <view class="logo">账号注册</view>
+  <view class="sub">填写信息提交，由管理员审核通过后即可使用</view>
+
+  <view wx:if="{{errMsg}}" class="err-banner"><text>{{errMsg}}</text></view>
+
+  <block wx:if="{{!result}}">
+    <view class="card">
+      <view class="field">
+        <text class="lbl">所属机构</text>
+        <input placeholder="如：XX证券股份有限公司" data-f="organization"
+               value="{{organization}}" bindinput="onInput" />
+      </view>
+      <view class="field">
+        <text class="lbl">姓名</text>
+        <input placeholder="您的真实姓名" data-f="name"
+               value="{{name}}" bindinput="onInput" />
+      </view>
+      <view class="field">
+        <text class="lbl">手机号</text>
+        <input placeholder="用于接收提醒与审核联系" type="number" maxlength="11"
+               data-f="phone" value="{{phone}}" bindinput="onInput" />
+      </view>
+      <view class="field">
+        <text class="lbl">邮箱（选填）</text>
+        <input placeholder="开启邮件提醒时必填" data-f="email"
+               value="{{email}}" bindinput="onInput" />
+      </view>
+    </view>
+    <button class="btn-primary reg-btn" loading="{{loading}}" bindtap="submit">提交注册</button>
+    <view class="skip-row" bindtap="goLogin"><text class="skip-text">已有账号？去登录</text></view>
+  </block>
+
+  <block wx:else>
+    <view class="card result">
+      <view class="res-icon">{{result.status === 'approved' ? '✅' : '⏳'}}</view>
+      <view class="res-title">{{result.status === 'approved' ? '已审核通过' : '提交成功'}}</view>
+      <view class="res-msg">{{result.message}}</view>
+      <button class="btn-primary reg-btn" bindtap="goLogin">{{result.status === 'approved' ? '去登录' : '返回登录'}}</button>
+    </view>
+  </block>
+</view>

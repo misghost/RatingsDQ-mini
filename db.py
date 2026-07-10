@@ -51,6 +51,40 @@ def get_conn():
     return conn
 
 
+def _add_col(conn, table, col, coltype, default=None):
+    """SQLite 不支持 IF NOT EXISTS 的 ALTER，手动判断列是否存在后再加。"""
+    cols = [r["name"] for r in conn.execute(f"PRAGMA table_info({table})")]
+    if col in cols:
+        return
+    ddl = f"ALTER TABLE {table} ADD COLUMN {col} {coltype}"
+    if default is not None:
+        ddl += f" DEFAULT {default}"
+    conn.execute(ddl)
+
+
+def _migrate_users(conn):
+    """注册 / 审核能力所需的用户表扩展（向后兼容：旧用户视为已审核通过）。"""
+    _add_col(conn, "users", "organization", "TEXT")
+    _add_col(conn, "users", "phone", "TEXT")
+    _add_col(conn, "users", "email", "TEXT")
+    _add_col(conn, "users", "status", "TEXT", "'approved'")
+    _add_col(conn, "users", "reviewed_at", "TEXT")
+    _add_col(conn, "users", "reviewed_by", "TEXT")
+    _add_col(conn, "users", "reject_reason", "TEXT")
+    # 旧数据（status 为 NULL）统一视为已审核通过，避免存量用户被锁死
+    conn.execute("UPDATE users SET status='approved' WHERE status IS NULL OR status=''")
+    # 通知偏好表
+    conn.execute("""
+    CREATE TABLE IF NOT EXISTS user_notif(
+        openid          TEXT PRIMARY KEY,
+        channels        TEXT,            -- JSON 数组: ["miniprogram","email"]
+        email           TEXT,
+        wx_subscribed   INTEGER DEFAULT 0,
+        wx_subscribe_at TEXT,
+        updated_at      TEXT DEFAULT (datetime('now'))
+    )""")
+
+
 def init_db():
     conn = get_conn()
     c = conn.cursor()
@@ -131,6 +165,7 @@ def init_db():
     );
     CREATE INDEX IF NOT EXISTS idx_final_openid ON final_ratings(openid);
     """)
+    _migrate_users(conn)
     conn.commit()
     conn.close()
 
@@ -138,7 +173,12 @@ def init_db():
 # ---------------------------------------------------------------------------
 # users
 # ---------------------------------------------------------------------------
-def upsert_user(openid, role=None, marketer_name=None):
+def upsert_user(openid, role=None, marketer_name=None, status=None):
+    """
+    仅供内部/管理员流程调用（登录态已确定）。
+    新增用户默认 status='approved'（不自动创建待审核账号——注册须走 register_user）。
+    已存在用户：不改动其 status（审核状态由审核流程控制），也不覆盖已审核信息。
+    """
     conn = get_conn()
     c = conn.cursor()
     existing = c.execute("SELECT * FROM users WHERE openid=?", (openid,)).fetchone()
@@ -150,10 +190,76 @@ def upsert_user(openid, role=None, marketer_name=None):
             c.execute("UPDATE users SET marketer_name=? WHERE openid=?",
                       (marketer_name, openid))
     else:
-        c.execute("INSERT INTO users(openid, role, marketer_name) VALUES(?,?,?)",
-                  (openid, role or "user", marketer_name))
+        c.execute("INSERT INTO users(openid, role, marketer_name, status) VALUES(?,?,?,?)",
+                  (openid, role or "user", marketer_name, status or "approved"))
     conn.commit()
     conn.close()
+
+
+# ---------------------------------------------------------------------------
+# 注册 / 审核
+# ---------------------------------------------------------------------------
+def register_user(openid, organization, name, phone, email=None, role="user"):
+    """
+    提交注册申请：创建待审核(pending)账号。
+    若已审核通过(approved)则保持通过、仅更新资料；若待审核/已拒绝则重新置为待审核。
+    """
+    conn = get_conn()
+    c = conn.cursor()
+    existing = c.execute("SELECT * FROM users WHERE openid=?", (openid,)).fetchone()
+    if existing:
+        c.execute(
+            """UPDATE users SET organization=?, marketer_name=?, phone=?, email=?, role=?
+               WHERE openid=?""",
+            (organization, name, phone, email, role, openid))
+        if existing["status"] not in ("approved",):
+            c.execute("UPDATE users SET status='pending' WHERE openid=?", (openid,))
+    else:
+        c.execute(
+            """INSERT INTO users(openid, role, marketer_name, organization, phone, email, status)
+               VALUES(?,?,?,?,?,?,'pending')""",
+            (openid, role, name, organization, phone, email))
+    conn.commit()
+    conn.close()
+
+
+def list_users(status=None, role=None):
+    conn = get_conn()
+    c = conn.cursor()
+    sql = "SELECT * FROM users"
+    where, params = [], []
+    if status:
+        where.append("status=?")
+        params.append(status)
+    if role:
+        where.append("role=?")
+        params.append(role)
+    if where:
+        sql += " WHERE " + " AND ".join(where)
+    sql += " ORDER BY (status='pending') DESC, created_at DESC"
+    rows = c.execute(sql, params).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def set_user_status(openid, status, reviewed_by=None, reason=None):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        """UPDATE users SET status=?, reviewed_at=datetime('now'),
+           reviewed_by=?, reject_reason=? WHERE openid=?""",
+        (status, reviewed_by, reason, openid))
+    conn.commit()
+    conn.close()
+
+
+def count_pending():
+    conn = get_conn()
+    n = conn.execute(
+        "SELECT COUNT(*) AS n FROM users WHERE status='pending'").fetchone()["n"]
+    conn.close()
+    return n
+
 
 
 def get_user(openid):
@@ -374,6 +480,71 @@ def get_admin_overview():
 
 def get_marketer_ratings(openid):
     return get_my_ratings(openid)
+
+
+# ---------------------------------------------------------------------------
+# 通知偏好（user_notif）
+# ---------------------------------------------------------------------------
+def get_notif(openid):
+    conn = get_conn()
+    r = conn.execute("SELECT * FROM user_notif WHERE openid=?", (openid,)).fetchone()
+    conn.close()
+    return dict(r) if r else None
+
+
+def set_notif(openid, channels_json, email):
+    conn = get_conn()
+    c = conn.cursor()
+    existing = c.execute(
+        "SELECT * FROM user_notif WHERE openid=?", (openid,)).fetchone()
+    if existing:
+        c.execute(
+            "UPDATE user_notif SET channels=?, email=?, updated_at=datetime('now') "
+            "WHERE openid=?", (channels_json, email, openid))
+    else:
+        c.execute(
+            "INSERT INTO user_notif(openid, channels, email) VALUES(?,?,?)",
+            (openid, channels_json, email))
+    conn.commit()
+    conn.close()
+
+
+def set_notif_subscribed(openid, subscribed):
+    conn = get_conn()
+    c = conn.cursor()
+    flag = 1 if subscribed else 0
+    existing = c.execute(
+        "SELECT * FROM user_notif WHERE openid=?", (openid,)).fetchone()
+    if existing:
+        c.execute(
+            "UPDATE user_notif SET wx_subscribed=?, wx_subscribe_at=datetime('now'), "
+            "updated_at=datetime('now') WHERE openid=?", (flag, openid))
+    else:
+        c.execute(
+            "INSERT INTO user_notif(openid, wx_subscribed, wx_subscribe_at) "
+            "VALUES(?,?,datetime('now'))", (openid, flag))
+    conn.commit()
+    conn.close()
+
+
+def get_approved_users_with_notif():
+    """已审核通过、且至少开启一个通知渠道的市场人员（不含 admin）。"""
+    conn = get_conn()
+    rows = conn.execute(
+        """SELECT u.openid, u.marketer_name, u.organization, u.phone, u.email AS u_email,
+                  n.channels, n.email AS n_email, n.wx_subscribed
+           FROM users u
+           LEFT JOIN user_notif n ON u.openid = n.openid
+           WHERE u.status='approved' AND u.role!='admin'
+             AND n.channels IS NOT NULL AND n.channels != '[]'""").fetchall()
+    conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["channels"] = json.loads(d["channels"] or "[]")
+        d["email"] = d["n_email"] or d["u_email"]
+        out.append(d)
+    return out
 
 
 # ---------------------------------------------------------------------------

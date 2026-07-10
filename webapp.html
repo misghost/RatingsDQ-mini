@@ -1,0 +1,750 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>客户评级到期提醒系统</title>
+<style>
+  :root{
+    --bg:#f2f4f7; --card:#fff; --line:#e6e8eb; --txt:#1f2329; --sub:#8a9099;
+    --blue:#2b6cff; --blue-d:#1f57e0;
+    --red:#e74c3c; --orange:#f39c12; --green:#27ae60; --grey:#9aa0a6;
+    --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+       background:var(--bg);color:var(--txt);font-size:14px;line-height:1.5}
+  button{font-family:inherit;cursor:pointer;border:none;transition:.15s}
+  button:active{transform:translateY(1px)}
+  input,select{font-family:inherit;font-size:14px}
+  .hide{display:none!important}
+
+  /* 顶栏 */
+  .topbar{position:sticky;top:0;z-index:20;background:var(--card);border-bottom:1px solid var(--line);
+          display:flex;align-items:center;justify-content:space-between;padding:12px 18px}
+  .brand{display:flex;align-items:center;gap:9px;font-size:16px;font-weight:700}
+  .brand .logo{width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#2b6cff,#4d8bff);
+        display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px}
+  .whoami{display:flex;align-items:center;gap:10px;font-size:13px}
+  .role-pill{font-size:12px;padding:3px 10px;border-radius:20px;background:#eef2ff;color:var(--blue);font-weight:600}
+  .role-pill.admin{background:#fdecec;color:var(--red)}
+  .btn-logout{background:#f1f3f5;color:var(--txt);border-radius:8px;padding:6px 12px;font-size:13px}
+
+  .wrap{max-width:960px;margin:0 auto;padding:18px}
+
+  /* 登录 */
+  .login-wrap{min-height:calc(100vh - 54px);display:flex;align-items:center;justify-content:center;padding:20px}
+  .login-card{background:var(--card);border-radius:16px;box-shadow:var(--shadow);width:100%;max-width:400px;padding:30px 26px;border:1px solid var(--line)}
+  .login-card h1{font-size:20px;text-align:center;margin-bottom:4px}
+  .login-card .tag{text-align:center;color:var(--sub);font-size:13px;margin-bottom:22px}
+  .tabs{display:flex;background:#f1f3f5;border-radius:10px;padding:4px;margin-bottom:20px}
+  .tabs button{flex:1;background:none;color:var(--sub);padding:8px;border-radius:8px;font-size:14px;font-weight:600}
+  .tabs button.on{background:#fff;color:var(--blue);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:13px;color:var(--sub);margin-bottom:6px}
+  .field input{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:10px;background:#fafbfc}
+  .field input:focus{outline:none;border-color:var(--blue);background:#fff}
+  .btn-primary{width:100%;background:var(--blue);color:#fff;border-radius:10px;padding:12px;font-size:15px;font-weight:600}
+  .btn-primary:hover{background:var(--blue-d)}
+  .login-err{color:var(--red);font-size:13px;margin-top:12px;text-align:center;min-height:18px}
+  .login-hint{color:var(--sub);font-size:12px;margin-top:16px;line-height:1.7;text-align:center}
+
+  /* 卡片 */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:16px;box-shadow:var(--shadow)}
+  .card h2{font-size:15px;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+  .card h2 .badge{font-size:11px;padding:2px 8px;border-radius:20px;background:#eef2ff;color:var(--blue);font-weight:600}
+  .sec-title{font-size:12px;color:var(--sub);margin:16px 0 8px;font-weight:600;letter-spacing:.02em}
+
+  /* 统计 */
+  .stat{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .stat .b{background:#fafbfc;border:1px solid var(--line);border-radius:12px;padding:14px 8px;text-align:center}
+  .stat .n{font-size:24px;font-weight:800;line-height:1.1}
+  .stat .l{font-size:12px;color:var(--sub);margin-top:4px}
+
+  /* 筛选 */
+  .filter{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 14px}
+  .filter button{background:#f1f3f5;color:var(--sub);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:600}
+  .filter button.on{background:var(--blue);color:#fff}
+
+  /* 提醒卡片 */
+  .ratings{display:grid;gap:10px}
+  .r{border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff;position:relative}
+  .r .name{font-weight:600;font-size:14px;padding-right:74px}
+  .r .meta{color:var(--sub);font-size:12.5px;margin-top:6px;line-height:1.7}
+  .r .meta b{color:var(--txt)}
+  .r .st{position:absolute;top:14px;right:14px;font-size:12px;padding:3px 10px;border-radius:20px;color:#fff;font-weight:600}
+  .st.overdue{background:var(--red)} .st.due{background:var(--orange)} .st.upcoming{background:var(--green)}
+  .days{display:inline-block;font-weight:700}
+  .days.neg{color:var(--red)} .days.warn{color:var(--orange)} .days.ok{color:var(--green)}
+
+  /* 表格 */
+  .tbl-wrap{overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px;min-width:440px}
+  th,td{text-align:left;padding:10px 10px;border-bottom:1px solid var(--line)}
+  th{color:var(--sub);font-weight:600;font-size:12px}
+  tbody tr{cursor:pointer}
+  tbody tr:hover{background:#f7f9ff}
+
+  /* 上传 */
+  .uprow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  input[type=file]{font-size:12.5px;flex:1;min-width:150px}
+  .btn{background:var(--blue);color:#fff;border-radius:9px;padding:9px 15px;font-size:13px;font-weight:600}
+  .btn.ghost{background:#fff;color:var(--blue);border:1px solid var(--blue)}
+  .btn.grey{background:#eef0f2;color:var(--txt)}
+  .msg{font-size:12.5px;color:var(--sub);margin-top:10px;white-space:pre-wrap;line-height:1.6}
+  .msg.ok{color:var(--green)} .msg.err{color:var(--red)}
+  .empty{color:var(--sub);font-size:13px;padding:14px;text-align:center;background:#fafbfc;border-radius:10px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin:6px 0 12px}
+  .legend span{font-size:12px;color:var(--sub)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px;vertical-align:middle}
+  details{margin-top:6px}
+  summary{font-size:13px;color:var(--blue);cursor:pointer;padding:6px 0}
+  .toolbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+  .link{color:var(--blue);cursor:pointer;font-size:13px;background:none}
+  .modal-mask{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:50;display:flex;align-items:center;justify-content:center;padding:16px}
+  .modal{background:#fff;border-radius:14px;max-width:460px;width:100%;padding:20px;max-height:82vh;overflow:auto}
+  .modal h3{font-size:16px;margin-bottom:12px}
+
+  @media (max-width:600px){
+    .wrap{padding:12px}
+    .stat{grid-template-columns:repeat(2,1fr)}
+    .brand{font-size:15px}
+  }
+
+  /* 后端地址配置横幅 */
+  .api-banner{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 14px;
+    background:#fff4e5;border-bottom:1px solid #ffd8a8;font-size:13px;color:#8a4b00}
+  .api-banner.hide{display:none}
+  .api-banner .warn{font-weight:600}
+  .api-banner input{flex:1;min-width:220px;padding:6px 10px;border:1px solid #ffb866;border-radius:8px;font-size:13px}
+  .api-banner .tip{color:#a06a1f;font-size:12px}
+  .btn-mini{padding:6px 12px;border:none;border-radius:8px;background:var(--blue);color:#fff;font-size:13px;cursor:pointer}
+  .btn-mini:hover{opacity:.9}
+
+  /* 注册 / 审核 / 提醒设置 */
+  .ch-row{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+  .ch-row:last-of-type{border-bottom:none}
+  .ch-main{display:flex;flex-direction:column;padding-right:14px}
+  .ch-main .t{font-size:14px;font-weight:600}
+  .ch-main .d{font-size:12px;color:var(--sub);margin-top:3px;line-height:1.5}
+  .switch{position:relative;width:46px;height:26px;border-radius:20px;background:#cfd4da;cursor:pointer;transition:.2s;flex:0 0 auto}
+  .switch.on{background:var(--blue)}
+  .switch::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:.2s}
+  .switch.on::after{left:23px}
+  .rev-item{border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:10px;background:#fff}
+  .rev-item .ri-top{display:flex;justify-content:space-between;font-weight:600}
+  .rev-item .ri-sub{font-size:12.5px;color:var(--sub);margin-top:6px;line-height:1.6}
+  .rev-actions{display:flex;gap:10px;margin-top:10px}
+  .btn.sm{padding:7px 14px;font-size:13px}
+  .login-err.ok{color:var(--green)}
+</style>
+</head>
+<body>
+
+<!-- 后端地址配置横幅（连不上后端时显示） -->
+<div class="api-banner hide" id="apiBanner">
+  <span class="warn">⚠️ 无法连接后端</span>
+  <input id="apiInput" type="text" placeholder="填写后端地址，如 http://服务器IP:5001（或与前端同源时留空）">
+  <button class="btn-mini" onclick="saveBackend()">保存并重试</button>
+  <span class="tip">网页版必须由后端托管。若前端单独部署，请在此填后端地址。</span>
+</div>
+
+<!-- 顶栏 -->
+<div class="topbar">
+  <div class="brand"><span class="logo">📅</span><span>客户评级到期提醒</span></div>
+  <div class="whoami hide" id="whoami">
+    <span class="role-pill" id="rolePill">市场人员</span>
+    <span id="nameText"></span>
+    <button class="btn-logout" onclick="logout()">退出</button>
+  </div>
+</div>
+
+<!-- 登录 -->
+<div class="login-wrap" id="loginView">
+  <div class="login-card">
+    <h1>评级到期提醒系统</h1>
+    <div class="tag">合同号精准归属 · 到期自动提醒</div>
+    <div class="tabs">
+      <button id="tabUser" class="on" onclick="switchTab('user')">市场人员</button>
+      <button id="tabAdmin" onclick="switchTab('admin')">管理员</button>
+      <button id="tabReg" onclick="switchTab('register')">注册</button>
+    </div>
+
+    <!-- 市场人员登录（手机号） -->
+    <div id="userLogin">
+      <div class="field">
+        <label>手机号</label>
+        <input id="userPhone" type="tel" placeholder="请输入注册时填写的手机号" autocomplete="off">
+      </div>
+      <button class="btn-primary" onclick="doLogin('user')">登录</button>
+      <div class="login-hint">使用注册时填写的手机号登录。首次使用请先<strong>注册</strong>并通过管理员审核。</div>
+    </div>
+
+    <!-- 管理员登录 -->
+    <div id="adminLogin" class="hide">
+      <div class="field">
+        <label>管理员名称</label>
+        <input id="adminName" type="text" placeholder="如 管理员" value="管理员" autocomplete="off">
+      </div>
+      <div class="field" id="pwdField">
+        <label>管理员口令</label>
+        <input id="adminPwd" type="password" placeholder="请输入管理员口令" autocomplete="off">
+      </div>
+      <button class="btn-primary" onclick="doLogin('admin')">登录</button>
+      <div class="login-hint">管理员可上传后台全量源数据、查看全员总览。</div>
+    </div>
+
+    <!-- 注册 -->
+    <div id="regLogin" class="hide">
+      <div class="field">
+        <label>所属机构</label>
+        <input id="regOrg" type="text" placeholder="如：XX证券股份有限公司" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>姓名</label>
+        <input id="regName" type="text" placeholder="您的真实姓名" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>手机号</label>
+        <input id="regPhone" type="tel" maxlength="11" placeholder="用于接收提醒与审核联系" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>邮箱（选填）</label>
+        <input id="regEmail" type="email" placeholder="开启邮件提醒时必填" autocomplete="off">
+      </div>
+      <button class="btn-primary" onclick="doRegister()">提交注册</button>
+      <div class="login-hint">提交后由管理员审核，通过后即可用手机号登录。</div>
+    </div>
+
+    <div class="login-err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- 市场人员主视图 -->
+<div class="wrap hide" id="userView">
+  <div class="card">
+    <div class="toolbar">
+      <h2 style="margin:0">我的到期提醒</h2>
+      <button class="link" onclick="loadMy()">🔄 刷新</button>
+    </div>
+    <div class="stat" id="myStat" style="margin-top:14px"></div>
+    <div class="filter" id="myFilter" style="margin-top:14px">
+      <button class="on" data-s="" onclick="setFilter('')">全部</button>
+      <button data-s="overdue" onclick="setFilter('overdue')">已过期</button>
+      <button data-s="due" onclick="setFilter('due')">即将到期</button>
+      <button data-s="upcoming" onclick="setFilter('upcoming')">有效期内</button>
+    </div>
+    <div class="legend">
+      <span><i class="dot" style="background:var(--red)"></i>已过期(可重新营销)</span>
+      <span><i class="dot" style="background:var(--orange)"></i>即将到期(3月内)</span>
+      <span><i class="dot" style="background:var(--green)"></i>有效期内</span>
+    </div>
+    <div class="ratings" id="myRatings"></div>
+  </div>
+
+  <div class="card">
+    <h2>上传数据</h2>
+    <div class="sec-title">① 合同管理（.xlsx，主归属，推荐）</div>
+    <div class="uprow">
+      <input type="file" id="contractFile" accept=".xlsx">
+      <button class="btn" onclick="uploadContract()">上传合同管理</button>
+    </div>
+    <div class="msg" id="ctMsg"></div>
+    <details>
+      <summary>② 上传承揽立项 / 项目作业（兜底，可选）</summary>
+      <div style="margin-top:10px">
+        <div class="uprow" style="margin-bottom:8px">
+          <select id="fbSource" style="padding:9px 10px;border:1px solid var(--line);border-radius:9px">
+            <option value="chenlan">承揽立项</option>
+            <option value="zuoye">项目作业</option>
+          </select>
+          <input type="file" id="fallbackFile" accept=".xlsx,.xls">
+          <button class="btn ghost" onclick="uploadFallback()">上传兜底文件</button>
+        </div>
+        <div class="msg" id="fbMsg"></div>
+      </div>
+    </details>
+  </div>
+
+  <div class="card">
+    <h2>提醒设置 <span class="badge">通知</span></h2>
+    <div class="sec-title">提醒方式（可多选）</div>
+    <div class="ch-row">
+      <div class="ch-main">
+        <span class="t">小程序服务提醒</span>
+        <span class="d">通过微信订阅消息推送（需在微信小程序中开启与授权）</span>
+      </div>
+      <div class="switch" id="swMp" onclick="toggleCh('miniprogram')"></div>
+    </div>
+    <div class="ch-row">
+      <div class="ch-main">
+        <span class="t">邮件提醒</span>
+        <span class="d">发送至下方邮箱地址</span>
+      </div>
+      <div class="switch" id="swEmail" onclick="toggleCh('email')"></div>
+    </div>
+    <div class="field" id="emailField" style="margin-top:12px;display:none">
+      <label>邮箱地址</label>
+      <input id="notifEmail" type="email" placeholder="name@company.com" autocomplete="off">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:6px">
+      <button class="btn" onclick="saveNotification()">保存提醒设置</button>
+      <button class="btn grey" onclick="testNotification()">发送测试提醒</button>
+    </div>
+    <div class="msg" id="notifMsg"></div>
+  </div>
+</div>
+
+<!-- 管理员主视图 -->
+<div class="wrap hide" id="adminView">
+  <div class="card">
+    <div class="toolbar">
+      <h2 style="margin:0">全员总览 <span class="badge">管理员</span></h2>
+      <button class="link" onclick="loadOverview()">🔄 刷新</button>
+    </div>
+    <div class="stat" id="ovStat" style="margin-top:14px"></div>
+    <div class="sec-title">按市场人员下钻（点击查看明细）</div>
+    <div class="tbl-wrap">
+      <table id="ovTable">
+        <thead><tr><th>市场人员</th><th>即将到期</th><th>已过期</th><th>有效期内</th><th>合计</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="msg" id="ovMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>用户审核 <span class="badge" id="pendingBadge">0</span></h2>
+    <div class="sec-title">待审核注册（通过后即可用手机号登录）</div>
+    <div id="reviewList"></div>
+    <div class="msg" id="reviewMsg"></div>
+  </div>
+
+  <div class="card">
+    <h2>后台源数据</h2>
+    <div class="sec-title">上传后台全量源数据（项目查询导出 .xls）</div>
+    <div class="uprow">
+      <input type="file" id="adminFile" accept=".xls">
+      <button class="btn" onclick="uploadAdmin()">上传并解析</button>
+      <button class="btn grey" onclick="recompute()">重新计算</button>
+    </div>
+    <div class="msg" id="adminMsg"></div>
+    <div id="demoBox" class="hide" style="margin-top:12px">
+      <div class="sec-title">演示（仅测试环境可用）</div>
+      <button class="btn ghost" onclick="seedDemo()">一键灌入演示数据</button>
+      <div class="msg" id="seedMsg"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 下钻弹窗 -->
+<div class="modal-mask hide" id="modalMask" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <div class="toolbar" style="margin-bottom:12px">
+      <h3 id="modalTitle" style="margin:0">明细</h3>
+      <button class="link" onclick="closeModal()">关闭</button>
+    </div>
+    <div class="ratings" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+/* ---------- 后端地址（可配置） ----------
+   优先级：URL ?api=  >  localStorage.apiBase  >  同源("")
+   同源("") 表示前端由 server.py 托管，最省事。若前端单独托管，
+   可访问 http://前端地址/?api=http://后端地址 或在此横幅里填写。 */
+function resolveAPI(){
+  const u = new URLSearchParams(location.search).get("api");
+  if(u){ const v=u.replace(/\/+$/,""); localStorage.setItem("apiBase", v); return v; }
+  return localStorage.getItem("apiBase") || "";
+}
+let API = resolveAPI();
+let OPENID = localStorage.getItem("openid") || "";
+let ROLE   = localStorage.getItem("role")   || "";
+let NAME   = localStorage.getItem("name")   || "";
+let CUR_FILTER = "";
+let CFG = { admin_password_required:false, demo_enabled:false };
+let NOTIF = { miniprogram:false, email:false };
+let NOTIF_EMAIL = "";
+
+const ST_LABEL = { overdue:"已过期", due:"即将到期", upcoming:"有效期内" };
+const ST_ORDER = { overdue:0, due:1, upcoming:2 };
+
+/* ---------- 通用请求 ---------- */
+async function api(path, opts={}){
+  opts.headers = Object.assign({ "X-Openid": OPENID }, opts.headers||{});
+  const r = await fetch(API+path, opts);
+  let body = {};
+  try { body = await r.json(); } catch(e){}
+  return { status:r.status, body };
+}
+
+/* ---------- 后端连接自检 ---------- */
+async function probeBackend(){
+  try{
+    const r = await fetch(API + "/api/config", { headers:{"X-Openid":""} });
+    if(r.ok){ try{ CFG = await r.json(); }catch(e){} return true; }
+  }catch(e){}
+  return false;
+}
+function showApiBanner(show){
+  const b = document.getElementById("apiBanner");
+  if(b) b.classList.toggle("hide", !show);
+  if(show){
+    const inp = document.getElementById("apiInput");
+    if(inp && !inp.value) inp.value = API || "";
+  }
+}
+function saveBackend(){
+  const inp = document.getElementById("apiInput");
+  let v = (inp.value || "").trim().replace(/\/+$/,"");
+  if(!v){ showApiBanner(false); API=""; return; }
+  API = v;
+  localStorage.setItem("apiBase", v);
+  boot();
+}
+async function boot(){
+  const ok = await probeBackend();
+  showApiBanner(!ok);
+  document.getElementById("pwdField").classList.toggle("hide", !CFG.admin_password_required);
+  if(OPENID){ render(); tryRestore(); }
+  else render();
+}
+async function tryRestore(){
+  // 恢复已存会话：探一下后端是否认这个 openid
+  const r = await api("/api/my/ratings");
+  if(r.status===403 || r.status===401){ logout(); }
+}
+
+/* ---------- 剩余天数 ---------- */
+function daysLeft(expiry){
+  if(!expiry) return null;
+  const d = new Date(expiry+"T00:00:00");
+  const now = new Date(); now.setHours(0,0,0,0);
+  return Math.round((d - now)/86400000);
+}
+function daysText(expiry, status){
+  const d = daysLeft(expiry);
+  if(d===null) return "";
+  if(d < 0)  return `<span class="days neg">已过期 ${-d} 天</span>`;
+  if(d===0)  return `<span class="days warn">今天到期</span>`;
+  const cls = status==="due" ? "warn" : "ok";
+  return `<span class="days ${cls}">剩 ${d} 天</span>`;
+}
+
+/* ---------- 登录 / 会话 ---------- */
+function switchTab(t){
+  document.getElementById("tabUser").classList.toggle("on", t==="user");
+  document.getElementById("tabAdmin").classList.toggle("on", t==="admin");
+  document.getElementById("tabReg").classList.toggle("on", t==="register");
+  document.getElementById("userLogin").classList.toggle("hide", t!=="user");
+  document.getElementById("adminLogin").classList.toggle("hide", t!=="admin");
+  document.getElementById("regLogin").classList.toggle("hide", t!=="register");
+  const errEl = document.getElementById("loginErr");
+  errEl.textContent = "";
+  errEl.style.color = "";
+}
+async function doLogin(role){
+  const errEl = document.getElementById("loginErr");
+  errEl.textContent = "";
+  errEl.style.color = "";
+  let payload;
+  if(role==="admin"){
+    const name = document.getElementById("adminName").value.trim() || "管理员";
+    const pwd  = document.getElementById("adminPwd").value;
+    payload = { name, role:"admin", password:pwd };
+  } else {
+    const phone = document.getElementById("userPhone").value.trim();
+    if(!phone){ errEl.textContent="请输入手机号"; return; }
+    payload = { phone, role:"user" };
+  }
+  try{
+    const r = await fetch(API+"/api/web/login", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(payload)
+    });
+    const j = await r.json();
+    if(r.status!==200){ errEl.textContent = j.error || "登录失败"; return; }
+    OPENID=j.openid; ROLE=j.role; NAME=j.name||payload.name||payload.phone;
+    localStorage.setItem("openid",OPENID);
+    localStorage.setItem("role",ROLE);
+    localStorage.setItem("name",NAME);
+    render();
+  }catch(e){ errEl.textContent="网络错误，请检查后端地址"; showApiBanner(true); }
+}
+
+async function doRegister(){
+  const errEl = document.getElementById("loginErr");
+  errEl.textContent = "";
+  errEl.style.color = "";
+  const organization = document.getElementById("regOrg").value.trim();
+  const name = document.getElementById("regName").value.trim();
+  const phone = document.getElementById("regPhone").value.trim();
+  const email = document.getElementById("regEmail").value.trim();
+  if(!organization || !name || !phone){ errEl.textContent="请填写所属机构、姓名、手机号"; return; }
+  if(!/^1[3-9]\d{9}$/.test(phone)){ errEl.textContent="手机号格式不正确"; return; }
+  try{
+    const r = await fetch(API+"/api/register", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({ platform:"web", organization, name, phone, email })
+    });
+    const j = await r.json();
+    if(r.status!==200){ errEl.textContent = j.error || "注册失败"; return; }
+    errEl.style.color = "var(--green)";
+    errEl.textContent = (j.message||"注册成功") + "（请用手机号登录）";
+  }catch(e){ errEl.textContent="网络错误，请检查后端地址"; showApiBanner(true); }
+}
+function logout(){
+  OPENID=ROLE=NAME=""; localStorage.clear(); render();
+}
+
+/* ---------- 提醒设置 ---------- */
+function toggleCh(ch){
+  NOTIF[ch] = !NOTIF[ch];
+  document.getElementById(ch==="miniprogram"?"swMp":"swEmail").classList.toggle("on", NOTIF[ch]);
+  document.getElementById("emailField").style.display = NOTIF.email ? "block" : "none";
+}
+async function loadNotification(){
+  const r = await api("/api/my/notification");
+  if(r.status!==200) return;
+  const ch = r.body.channels || [];
+  NOTIF = { miniprogram: ch.indexOf("miniprogram")>=0, email: ch.indexOf("email")>=0 };
+  NOTIF_EMAIL = r.body.email || "";
+  document.getElementById("swMp").classList.toggle("on", NOTIF.miniprogram);
+  document.getElementById("swEmail").classList.toggle("on", NOTIF.email);
+  document.getElementById("notifEmail").value = NOTIF_EMAIL;
+  document.getElementById("emailField").style.display = NOTIF.email ? "block" : "none";
+}
+async function saveNotification(){
+  const ch=[];
+  if(NOTIF.miniprogram) ch.push("miniprogram");
+  if(NOTIF.email) ch.push("email");
+  const email = document.getElementById("notifEmail").value.trim();
+  const m=document.getElementById("notifMsg");
+  if(ch.indexOf("email")>=0 && !email){ m.className="msg err"; m.textContent="启用邮件提醒需填写邮箱地址"; return; }
+  const r = await api("/api/my/notification", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ channels:ch, email }) });
+  if(r.status===200){ m.className="msg ok"; m.textContent="✅ 提醒设置已保存"; }
+  else { m.className="msg err"; m.textContent="❌ "+(r.body.error||"保存失败"); }
+}
+async function testNotification(){
+  const m=document.getElementById("notifMsg"); m.className="msg"; m.textContent="发送中…";
+  const r = await api("/api/my/notification/test", { method:"POST", headers:{"Content-Type":"application/json"}, body:"{}" });
+  if(r.status===200){
+    const fails=(r.body.results||[]).filter(x=>!x.ok);
+    m.className="msg ok";
+    m.textContent = fails.length ? ("已发送，但部分渠道未成功：" + fails.map(x=>x.channel).join("、")) : "✅ 测试提醒已触发（请查收）";
+  } else { m.className="msg err"; m.textContent="❌ "+(r.body.error||"发送失败"); }
+}
+
+/* ---------- 用户审核（管理员） ---------- */
+async function loadUsers(){
+  const r = await api("/api/admin/users");
+  if(r.status!==200) return;
+  document.getElementById("pendingBadge").textContent = r.body.pending_count||0;
+  const list = (r.body.users||[]).filter(u=>u.status==="pending");
+  const box = document.getElementById("reviewList");
+  if(!list.length){ box.innerHTML = '<div class="empty">暂无待审核注册</div>'; return; }
+  box.innerHTML = list.map(u=>`
+    <div class="rev-item">
+      <div class="ri-top"><span>${esc(u.name)}</span><span class="muted">${esc(u.organization||"")}</span></div>
+      <div class="ri-sub">手机：${esc(u.phone||"—")}　邮箱：${esc(u.email||"—")}</div>
+      <div class="rev-actions">
+        <button class="btn sm" onclick="reviewUser('${esc(u.openid)}','approve')">通过</button>
+        <button class="btn sm grey" onclick="reviewUser('${esc(u.openid)}','reject')">拒绝</button>
+      </div>
+    </div>`).join("");
+}
+async function reviewUser(openid, action){
+  let reason="";
+  if(action==="reject"){ reason = prompt("拒绝原因（选填）：") || ""; }
+  const r = await api("/api/admin/users/review", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ openid, action, reason }) });
+  const m=document.getElementById("reviewMsg");
+  if(r.status===200){ m.className="msg ok"; m.textContent="✅ 已"+(action==="approve"?"通过":"拒绝"); loadUsers(); loadOverview(); }
+  else { m.className="msg err"; m.textContent="❌ "+(r.body.error||"操作失败"); }
+}
+
+/* ---------- 视图切换 ---------- */
+function render(){
+  const logged = !!OPENID;
+  document.getElementById("loginView").classList.toggle("hide", logged);
+  document.getElementById("whoami").classList.toggle("hide", !logged);
+  const isAdmin = ROLE==="admin";
+  document.getElementById("adminView").classList.toggle("hide", !(logged&&isAdmin));
+  document.getElementById("userView").classList.toggle("hide", !(logged&&!isAdmin));
+  if(logged){
+    const pill=document.getElementById("rolePill");
+    pill.textContent = isAdmin?"管理员":"市场人员";
+    pill.className = "role-pill"+(isAdmin?" admin":"");
+    document.getElementById("nameText").textContent = NAME||"";
+    if(isAdmin){
+      document.getElementById("demoBox").classList.toggle("hide", !CFG.demo_enabled);
+      loadOverview();
+      loadUsers();
+    } else {
+      loadMy();
+      loadNotification();
+    }
+  }
+}
+
+/* ---------- 市场人员：我的提醒 ---------- */
+function setFilter(s){
+  CUR_FILTER=s;
+  document.querySelectorAll("#myFilter button").forEach(b=>b.classList.toggle("on", b.dataset.s===s));
+  loadMy();
+}
+async function loadMy(){
+  const el=document.getElementById("myRatings");
+  el.innerHTML='<div class="empty">加载中…</div>';
+  const q = CUR_FILTER ? ("?status="+CUR_FILTER) : "";
+  const r = await api("/api/my/ratings"+q);
+  if(r.status===403){ logout(); return; }
+  if(r.status!==200){ el.innerHTML=`<div class="empty">加载失败：${r.body.error||r.status}</div>`; return; }
+  // 统计（总是拉全量算各态）
+  await loadMyStat();
+  const list = r.body.ratings||[];
+  if(!list.length){
+    el.innerHTML='<div class="empty">暂无'+(CUR_FILTER?ST_LABEL[CUR_FILTER]:"")+'记录。<br>可上传「合同管理.xlsx」绑定归属，或等管理员上传后台数据后重算。</div>';
+    return;
+  }
+  el.innerHTML = renderCards(list);
+}
+async function loadMyStat(){
+  const r = await api("/api/my/ratings");
+  const el=document.getElementById("myStat");
+  if(r.status!==200){ el.innerHTML=""; return; }
+  const c={overdue:0,due:0,upcoming:0};
+  (r.body.ratings||[]).forEach(x=>{ if(c[x.status]!=null)c[x.status]++; });
+  const total=(r.body.ratings||[]).length;
+  el.innerHTML =
+    `<div class="b"><div class="n">${total}</div><div class="l">全部</div></div>`+
+    `<div class="b"><div class="n" style="color:var(--red)">${c.overdue}</div><div class="l">已过期</div></div>`+
+    `<div class="b"><div class="n" style="color:var(--orange)">${c.due}</div><div class="l">即将到期</div></div>`+
+    `<div class="b"><div class="n" style="color:var(--green)">${c.upcoming}</div><div class="l">有效期内</div></div>`;
+}
+function renderCards(list){
+  const rs=[...list].sort((a,b)=>(ST_ORDER[a.status]-ST_ORDER[b.status]) || (a.expiry_date>b.expiry_date?1:-1));
+  return rs.map(r=>{
+    const attr = r.attribution==="contract_join" ? "合同号精准匹配"
+               : (r.attribution&&r.attribution.indexOf("window")>=0 ? "时间窗口兜底" : "—");
+    return `<div class="r">
+      <span class="st ${r.status}">${ST_LABEL[r.status]||r.status}</span>
+      <div class="name">${esc(r.subject)}</div>
+      <div class="meta">
+        合同号：${esc(r.contract_no)||"—"}　${daysText(r.expiry_date,r.status)}<br>
+        到期日：<b>${r.expiry_date||"—"}</b>　提醒日：${r.remind_date||"—"}<br>
+        类型：${esc(r.debt_type)||"—"}${r.project_type?" ｜ "+esc(r.project_type):""} ｜ 归属：${attr}
+      </div></div>`;
+  }).join("");
+}
+
+/* ---------- 市场人员：上传 ---------- */
+async function uploadContract(){
+  const f=document.getElementById("contractFile").files[0];
+  const m=document.getElementById("ctMsg");
+  if(!f){ m.className="msg err"; m.textContent="请先选择文件"; return; }
+  m.className="msg"; m.textContent="上传解析中…";
+  const fd=new FormData(); fd.append("file",f);
+  const r=await api("/api/upload/contract",{method:"POST",body:fd});
+  if(r.status===409 && r.body.error==="multiple_marketers"){
+    const who = prompt("该文件含多名市场人员：\n"+r.body.marketers.join("、")+"\n\n请输入你的姓名（须完全一致）：", NAME||"");
+    if(!who) { m.className="msg"; m.textContent="已取消"; return; }
+    const fd2=new FormData(); fd2.append("file",f); fd2.append("market_as",who);
+    const r2=await api("/api/upload/contract",{method:"POST",body:fd2});
+    return showContractResult(r2,m);
+  }
+  showContractResult(r,m);
+}
+function showContractResult(r,m){
+  if(r.status===200){
+    m.className="msg ok";
+    m.textContent=`✅ 已绑定「${r.body.bound_marketer}」，合同 ${r.body.contract_count} 条`;
+    loadMy();
+  }else{ m.className="msg err"; m.textContent="❌ "+(r.body.error||JSON.stringify(r.body)); }
+}
+async function uploadFallback(){
+  const f=document.getElementById("fallbackFile").files[0];
+  const m=document.getElementById("fbMsg");
+  if(!f){ m.className="msg err"; m.textContent="请先选择文件"; return; }
+  m.className="msg"; m.textContent="上传解析中…";
+  const fd=new FormData(); fd.append("file",f); fd.append("source",document.getElementById("fbSource").value);
+  const r=await api("/api/upload/fallback",{method:"POST",body:fd});
+  if(r.status===200){ m.className="msg ok"; m.textContent=`✅ 解析保留 ${r.body.kept} 条（丢弃 ${r.body.dropped}）`; loadMy(); }
+  else { m.className="msg err"; m.textContent="❌ "+(r.body.error||JSON.stringify(r.body)); }
+}
+
+/* ---------- 管理员 ---------- */
+async function loadOverview(){
+  const r=await api("/api/admin/overview");
+  const msg=document.getElementById("ovMsg");
+  if(r.status===403){ logout(); return; }
+  if(r.status!==200){ msg.className="msg err"; msg.textContent=r.body.error||"加载失败"; return; }
+  msg.textContent="";
+  const o=r.body, bs=o.by_status||{};
+  document.getElementById("ovStat").innerHTML=
+    `<div class="b"><div class="n">${o.total||0}</div><div class="l">总归属</div></div>`+
+    `<div class="b"><div class="n" style="color:var(--red)">${bs.overdue||0}</div><div class="l">已过期</div></div>`+
+    `<div class="b"><div class="n" style="color:var(--orange)">${bs.due||0}</div><div class="l">即将到期</div></div>`+
+    `<div class="b"><div class="n" style="color:var(--green)">${bs.upcoming||0}</div><div class="l">有效期内</div></div>`;
+  const tb=document.querySelector("#ovTable tbody"); tb.innerHTML="";
+  const bm=o.by_marketer||{};
+  const entries=Object.entries(bm);
+  if(!entries.length){ tb.innerHTML='<tr><td colspan="5" class="empty">暂无数据，请先上传后台源数据</td></tr>'; return; }
+  entries.sort((a,b)=>(b[1].total||0)-(a[1].total||0));
+  for(const [oid,mk] of entries){
+    const s=mk.by_status||{};
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td><b>${esc(mk.name)||oid}</b></td>
+      <td style="color:var(--orange)">${s.due||0}</td>
+      <td style="color:var(--red)">${s.overdue||0}</td>
+      <td style="color:var(--green)">${s.upcoming||0}</td>
+      <td><b>${mk.total||0}</b></td>`;
+    tr.onclick=()=>drill(oid, mk.name||oid);
+    tb.appendChild(tr);
+  }
+}
+async function drill(oid,name){
+  const r=await api("/api/admin/marketer?openid="+encodeURIComponent(oid));
+  document.getElementById("modalTitle").textContent=name+" · 明细";
+  const body=document.getElementById("modalBody");
+  if(r.status!==200){ body.innerHTML=`<div class="empty">${r.body.error||"加载失败"}</div>`; }
+  else { const list=r.body.ratings||[]; body.innerHTML = list.length?renderCards(list):'<div class="empty">该市场人员暂无归属记录</div>'; }
+  document.getElementById("modalMask").classList.remove("hide");
+}
+function closeModal(){ document.getElementById("modalMask").classList.add("hide"); }
+
+async function uploadAdmin(){
+  const f=document.getElementById("adminFile").files[0];
+  const m=document.getElementById("adminMsg");
+  if(!f){ m.className="msg err"; m.textContent="请先选择 .xls 文件"; return; }
+  m.className="msg"; m.textContent="上传解析中（大文件稍慢）…";
+  const fd=new FormData(); fd.append("file",f);
+  const r=await api("/api/admin/source",{method:"POST",body:fd});
+  if(r.status===200){
+    const cs=r.body.compute_stats||{};
+    m.className="msg ok";
+    m.textContent=`✅ 后台解析 ${r.body.admin_records} 条 → 归属计算 ${cs.final_count||0} 条`;
+    loadOverview();
+  }else{ m.className="msg err"; m.textContent="❌ "+(r.body.error||JSON.stringify(r.body)); }
+}
+async function recompute(){
+  const m=document.getElementById("adminMsg"); m.className="msg"; m.textContent="重新计算中…";
+  const r=await api("/api/compute",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});
+  if(r.status===200){ m.className="msg ok"; m.textContent=`✅ 重算完成：归属 ${r.body.final_count} 条`; loadOverview(); }
+  else{ m.className="msg err"; m.textContent="❌ "+(r.body.error||JSON.stringify(r.body)); }
+}
+async function seedDemo(){
+  const m=document.getElementById("seedMsg"); m.className="msg"; m.textContent="灌入中…";
+  const r=await api("/api/demo/seed",{method:"POST"});
+  if(r.status===200){ m.className="msg ok"; m.textContent="✅ 演示数据已灌入"; loadOverview(); }
+  else{ m.className="msg err"; m.textContent="❌ "+(r.body.error||JSON.stringify(r.body)); }
+}
+
+/* ---------- 工具 ---------- */
+function esc(s){ return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+window.addEventListener("DOMContentLoaded", boot);
+</script>
+</body>
+</html>

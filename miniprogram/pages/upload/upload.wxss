@@ -1,0 +1,47 @@
+.wrap { padding: 24rpx; }
+.section { background: #fff; border-radius: 16rpx; padding: 24rpx; margin-bottom: 24rpx; }
+.sec-title { font-size: 30rpx; font-weight: 600; margin-bottom: 20rpx; }
+
+/* 未登录提示 */
+.need-login {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 120rpx 48rpx;
+}
+.nl-icon { font-size: 80rpx; margin-bottom: 20rpx; }
+.nl-title { font-size: 32rpx; font-weight: 600; color: #1f2329; margin-bottom: 12rpx; }
+.nl-desc { font-size: 26rpx; color: #9aa0a6; margin-bottom: 40rpx; text-align: center; }
+.btn-go-login {
+  width: 400rpx; height: 80rpx; line-height: 80rpx;
+  border-radius: 48rpx; font-size: 30rpx;
+  background: #07c160; color: #fff;
+}
+
+.up-btn {
+  background: #07c160;
+  color: #fff;
+  border-radius: 44rpx;
+  margin-bottom: 16rpx;
+  font-size: 28rpx;
+  height: 84rpx;
+  line-height: 84rpx;
+}
+.up-btn.ghost { background: #e8f8ef; color: #07c160; }
+
+.tip { font-size: 22rpx; color: #9aa0a6; margin-top: 8rpx; }
+
+.picker {
+  background: #f5f6f8;
+  padding: 24rpx;
+  border-radius: 12rpx;
+  text-align: center;
+  color: #1f2329;
+}
+
+.msg { font-size: 26rpx; color: #1f2329; margin: 12rpx 0; }
+.result {
+  font-size: 24rpx;
+  color: #5a6066;
+  background: #f5f6f8;
+  padding: 16rpx;
+  border-radius: 12rpx;
+}

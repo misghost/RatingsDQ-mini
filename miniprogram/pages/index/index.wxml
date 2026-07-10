@@ -1,0 +1,105 @@
+<!-- 未登录：功能介绍 + 示例数据 + 登录引导 -->
+<view wx:if="{{!loggedIn}}" class="guest-wrap">
+  <view class="guest-hero">
+    <view class="guest-logo">评级到期提醒</view>
+    <view class="guest-desc">实时跟踪客户信用评级到期情况，自动提醒即将过期和已过期的评级项目，助您及时续做、避免遗漏。</view>
+  </view>
+
+  <view class="summary">
+    <view class="sum-item">
+      <text class="num" style="color:#e54d42">{{summary.overdue}}</text>
+      <text class="lbl">已过期</text>
+    </view>
+    <view class="sum-item">
+      <text class="num" style="color:#ff976a">{{summary.due}}</text>
+      <text class="lbl">即将到期</text>
+    </view>
+    <view class="sum-item">
+      <text class="num" style="color:#07c160">{{summary.upcoming}}</text>
+      <text class="lbl">有效期内</text>
+    </view>
+    <view class="sum-item">
+      <text class="num">{{summary.total}}</text>
+      <text class="lbl">合计</text>
+    </view>
+  </view>
+
+  <view class="filters">
+    <view wx:for="{{filters}}" wx:key="key"
+      class="filter {{active===item.key ? 'active' : ''}}"
+      data-key="{{item.key}}" bindtap="switchFilter">{{item.label}}</view>
+  </view>
+
+  <view class="demo-hint">（当前为示例数据，登录后查看个人专属数据）</view>
+
+  <view wx:for="{{list}}" wx:key="contract_no" class="card rating">
+    <view class="rating-top">
+      <text class="subject">{{item.subject}}</text>
+      <text class="tag" style="color:{{item.statusColor}};background:{{item.statusBg}}">{{item.statusLabel}}</text>
+    </view>
+    <view class="row"><text class="k">合同号</text><text class="v">{{item.contract_no}}</text></view>
+    <view class="row"><text class="k">债务类型</text><text class="v">{{item.debt_type || '—'}}</text></view>
+    <view class="row"><text class="k">项目类型</text><text class="v">{{item.project_type || '—'}}</text></view>
+    <view class="row"><text class="k">到期日</text><text class="v">{{item.expiry}}</text></view>
+    <view class="row"><text class="k">提醒日</text><text class="v">{{item.remind}}</text></view>
+    <view class="row" wx:if="{{item.left !== null}}">
+      <text class="k">剩余</text>
+      <text class="v" style="color:{{item.statusColor}}">{{item.left >= 0 ? item.left + ' 天' : '已超 ' + (-item.left) + ' 天'}}</text>
+    </view>
+  </view>
+
+  <!-- 底部固定登录按钮 -->
+  <view class="login-cta">
+    <button class="btn-primary" bindtap="goToLogin">立即登录，查看我的数据</button>
+  </view>
+</view>
+
+<!-- 已登录：正常数据展示 -->
+<block wx:if="{{loggedIn}}">
+  <view wx:if="{{!ready && loading}}" class="loading">加载中…</view>
+
+  <block wx:else>
+    <view class="summary">
+      <view class="sum-item">
+        <text class="num" style="color:#e54d42">{{summary.overdue}}</text>
+        <text class="lbl">已过期</text>
+      </view>
+      <view class="sum-item">
+        <text class="num" style="color:#ff976a">{{summary.due}}</text>
+        <text class="lbl">即将到期</text>
+      </view>
+      <view class="sum-item">
+        <text class="num" style="color:#07c160">{{summary.upcoming}}</text>
+        <text class="lbl">有效期内</text>
+      </view>
+      <view class="sum-item">
+        <text class="num">{{summary.total}}</text>
+        <text class="lbl">合计</text>
+      </view>
+    </view>
+
+    <view class="filters">
+      <view wx:for="{{filters}}" wx:key="key"
+        class="filter {{active===item.key ? 'active' : ''}}"
+        data-key="{{item.key}}" bindtap="switchFilter">{{item.label}}</view>
+    </view>
+
+    <view wx:if="{{list.length===0}}" class="empty">暂无到期提醒</view>
+
+    <view wx:for="{{list}}" wx:key="contract_no" class="card rating">
+      <view class="rating-top">
+        <text class="subject">{{item.subject}}</text>
+        <text class="tag" style="color:{{item.statusColor}};background:{{item.statusBg}}">{{item.statusLabel}}</text>
+      </view>
+      <view class="row"><text class="k">合同号</text><text class="v">{{item.contract_no}}</text></view>
+      <view class="row"><text class="k">债务类型</text><text class="v">{{item.debt_type || '—'}}</text></view>
+      <view class="row"><text class="k">项目类型</text><text class="v">{{item.project_type || '—'}}</text></view>
+      <view class="row"><text class="k">到期日</text><text class="v">{{item.expiry}}</text></view>
+      <view class="row"><text class="k">提醒日</text><text class="v">{{item.remind}}</text></view>
+      <view class="row" wx:if="{{item.left !== null}}">
+        <text class="k">剩余</text>
+        <text class="v" style="color:{{item.statusColor}}">{{item.left >= 0 ? item.left + ' 天' : '已超 ' + (-item.left) + ' 天'}}</text>
+      </view>
+    </view>
+  </block>
+</block>

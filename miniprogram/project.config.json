@@ -1,0 +1,21 @@
+{
+  "description": "评级到期提醒小程序前端",
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "newFeature": true,
+    "bigPackageSizeSupport": true
+  },
+  "compileType": "miniprogram",
+  "libVersion": "3.0.0",
+  "appid": "wxf0377d6984b59454",
+  "projectname": "rating-mini",
+  "condition": {}
+}

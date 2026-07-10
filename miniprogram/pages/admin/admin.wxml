@@ -1,0 +1,68 @@
+<view class="wrap">
+  <!-- 未登录提示 -->
+  <view wx:if="{{!loggedIn}}" class="need-login">
+    <text class="nl-icon">📊</text>
+    <text class="nl-title">管理员登录后查看</text>
+    <text class="nl-desc">请以管理员身份登录后查看全员总览</text>
+    <button class="btn-go-login" bindtap="goLogin">去登录</button>
+  </view>
+
+  <!-- 已登录但非管理员 -->
+  <block wx:if="{{loggedIn && role !== 'admin'}}">
+    <view class="deny">无权限：仅管理员可查看总览</view>
+  </block>
+
+  <!-- 管理员已登录 -->
+  <block wx:if="{{loggedIn && role === 'admin'}}">
+    <view wx:if="{{!marketer}}">
+
+      <!-- 用户审核 -->
+      <view class="sec-title">用户审核<text wx:if="{{pendingCount}}" class="badge">待审 {{pendingCount}}</text></view>
+      <view wx:if="{{pending.length === 0}}" class="empty">暂无待审核注册</view>
+      <view wx:for="{{pending}}" wx:key="openid" class="card pending">
+        <view class="p-top">
+          <text class="name">{{item.name}}</text>
+          <text class="org">{{item.organization || '—'}}</text>
+        </view>
+        <view class="p-row"><text class="k">手机</text><text class="v">{{item.phone || '—'}}</text></view>
+        <view class="p-row"><text class="k">邮箱</text><text class="v">{{item.email || '—'}}</text></view>
+        <view class="p-actions">
+          <button class="btn-approve" data-oid="{{item.openid}}" bindtap="approve">通过</button>
+          <button class="btn-reject" data-oid="{{item.openid}}" bindtap="reject">拒绝</button>
+        </view>
+      </view>
+
+      <view class="ov-card">
+        <view class="ov-row"><text>后台评级总数</text><text class="strong">{{overview.admin_total}}</text></view>
+        <view class="ov-row"><text>已计算归属</text><text class="strong">{{overview.final_count}}</text></view>
+        <view class="ov-row"><text>无出具时间跳过</text><text class="strong">{{overview.skipped_no_issuance}}</text></view>
+        <view class="ov-row"><text>过期噪音过滤</text><text class="strong">{{overview.dropped_overdue_noise}}</text></view>
+      </view>
+
+      <view class="sec-title">按市场人员</view>
+      <view wx:for="{{marketers}}" wx:key="openid" class="card mkt"
+        data-oid="{{item.openid}}" bindtap="openMarketer">
+        <view class="mkt-top">
+          <text class="name">{{item.name}}</text>
+          <text class="total">共 {{item.total}}</text>
+        </view>
+        <view class="mkt-stats">
+          <text style="color:#e54d42">过期 {{item.by_status.overdue || 0}}</text>
+          <text style="color:#ff976a">即将 {{item.by_status.due || 0}}</text>
+          <text style="color:#07c160">有效 {{item.by_status.upcoming || 0}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view wx:else>
+      <view class="back" bindtap="back">‹ 返回总览（{{marketer}}）</view>
+      <view wx:if="{{marketerRatings.length === 0}}" class="empty">该人员暂无到期提醒</view>
+      <view wx:for="{{marketerRatings}}" wx:key="contract_no" class="card">
+        <view class="subject">{{item.subject}}</view>
+        <view class="row"><text class="k">合同号</text><text class="v">{{item.contract_no}}</text></view>
+        <view class="row"><text class="k">到期日</text><text class="v">{{item.expiry_date}}</text></view>
+        <view class="row"><text class="k">状态</text><text class="v">{{item.status}}</text></view>
+      </view>
+    </view>
+  </block>
+</view>

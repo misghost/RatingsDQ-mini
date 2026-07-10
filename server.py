@@ -23,6 +23,7 @@ server.py — 评级到期提醒 后端 API 骨架（Flask）
 
 import os
 import io
+import re
 import json
 import tempfile
 import hashlib
@@ -42,9 +43,27 @@ import admin_source as adm
 WX_APPID = os.environ.get("WX_APPID")
 WX_SECRET = os.environ.get("WX_SECRET")
 
+# Web 版管理员口令（可选）。设置后，管理员登录必须输入正确口令；未设置则任意人可用管理员入口（仅联调方便，生产务必设置）。
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
+
 # 演示种子文件（仅本地预览用，生产环境删除此路由与常量）
-DEMO_ADMIN_XLS = "/Volumes/D/编程/业绩到期查询/项目查询导出.xls"
-DEMO_CONTRACT_XLSX = "/Volumes/D/编程/业绩到期查询/自定义上传优化版/合同管理.xlsx"
+# 演示数据源（默认是本机路径；部署到服务器时用环境变量覆盖即可）
+DEMO_ADMIN_XLS = os.environ.get(
+    "DEMO_ADMIN_XLS",
+    "/Volumes/D/编程/业绩到期查询/项目查询导出.xls")
+DEMO_CONTRACT_XLSX = os.environ.get(
+    "DEMO_CONTRACT_XLSX",
+    "/Volumes/D/编程/业绩到期查询/自定义上传优化版/合同管理.xlsx")
+
+# 通知 / 推送配置（均为可选；未配置时对应渠道静默跳过，不影响其他功能）
+WX_TEMPLATE_ID  = os.environ.get("WX_TEMPLATE_ID")    # 微信订阅消息模板ID
+WX_TEMPLATE_DATA = os.environ.get("WX_TEMPLATE_DATA")  # JSON：字段映射（占位 {subject}{expiry}{count}）
+SMTP_HOST = os.environ.get("SMTP_HOST")
+SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
+SMTP_USER = os.environ.get("SMTP_USER")
+SMTP_PASS = os.environ.get("SMTP_PASS")
+SMTP_FROM = os.environ.get("SMTP_FROM") or SMTP_USER
+SMTP_TLS  = str(os.environ.get("SMTP_TLS", "1")).lower() not in ("0", "false", "no")
 
 app = Flask(__name__)
 CORS(app)  # 开发期允许小程序跨域；生产可收紧
@@ -67,34 +86,11 @@ def current_openid():
     return oid or None
 
 
-def require_openid():
-    oid = current_openid()
-    if not oid:
-        return None, jsonify({"error": "missing X-Openid header"}), 401
-    u = db.get_user(oid)
-    if not u:
-        return None, jsonify({"error": "unknown user, login first"}), 403
-    return oid, None, None
-
-
-@app.route("/api/login", methods=["POST"])
-def login():
-    """
-    微信登录。
-    真实接入（云托管生产）：配置 WX_APPID / WX_SECRET 后，用小程序 wx.login() 拿到的
-    code 调 code2Session 换取 openid。
-    未配置时退化为 mock：直接把 code 当作 openid（演示/联调）。
-    """
-    body = request.get_json(silent=True) or {}
-    code = (body.get("code") or "").strip()
-    role = body.get("role", "user")
-    if not code:
-        return jsonify({"error": "code required"}), 400
-
+def _openid_from_code(code, role="user"):
+    """微信 code -> openid（与 login 共用）。"""
     if code == "admin":
-        openid = "admin"
-    elif WX_APPID and WX_SECRET:
-        # 真实 code2Session
+        return "admin"
+    if WX_APPID and WX_SECRET:
         url = ("https://api.weixin.qq.com/sns/jscode2session?appid=%s"
                "&secret=%s&js_code=%s&grant_type=authorization_code") % (
             urllib.parse.quote(WX_APPID), urllib.parse.quote(WX_SECRET),
@@ -103,17 +99,402 @@ def login():
             with urllib.request.urlopen(url, timeout=6) as resp:
                 d = json.loads(resp.read())
         except Exception as e:
-            return jsonify({"error": f"code2Session error: {e}"}), 502
-        if not d.get("openid"):
-            return jsonify({"error": "code2Session failed", "detail": d}), 400
-        openid = d["openid"]
-    else:
-        # 退化 mock：code -> openid（演示/联调）
-        openid = hashlib.sha1(code.encode("utf-8")).hexdigest()[:20]
+            print("[login] code2Session error:", e)
+            return None
+        return d.get("openid") or None
+    # 退化 mock：code -> openid（演示/联调）
+    return hashlib.sha1(code.encode("utf-8")).hexdigest()[:20]
 
-    db.upsert_user(openid, role=role, marketer_name=None)
-    return jsonify({"openid": openid, "role": db.get_user(openid)["role"],
-                    "token": openid})  # 骨架 token == openid
+
+def _user_gate(oid):
+    """统一审核状态门禁：返回 (oid, None, None) 或 (None, err_json, code)。"""
+    if not oid:
+        return None, jsonify({"error": "missing X-Openid header"}), 401
+    u = db.get_user(oid)
+    if not u:
+        return None, jsonify({"error": "请先注册账号后再登录",
+                              "code": "NOT_REGISTERED"}), 403
+    if u["role"] != "admin" and u["status"] != "approved":
+        if u["status"] == "pending":
+            return None, jsonify({"error": "账号审核中，请等待管理员审核",
+                                  "code": "PENDING"}), 403
+        if u["status"] == "rejected":
+            return None, jsonify({"error": "账号未通过审核：" + (u["reject_reason"] or ""),
+                                  "code": "REJECTED"}), 403
+        return None, jsonify({"error": "账号状态异常", "code": "BAD_STATUS"}), 403
+    return oid, None, None
+
+
+def require_openid():
+    """要求已登录且已审核通过的用户（上传、查询等均走此门禁）。"""
+    return _user_gate(current_openid())
+
+
+@app.route("/api/login", methods=["POST"])
+def login():
+    """
+    微信登录。注册 + 审核通过的账号才能拿到会话；
+    未注册 / 待审核 / 已拒绝会被门禁拦截并返回对应 code。
+    """
+    body = request.get_json(silent=True) or {}
+    code = (body.get("code") or "").strip()
+    role = body.get("role", "user")
+    if not code:
+        return jsonify({"error": "code required"}), 400
+
+    if role == "admin" or code == "admin":
+        # 管理员登录（dev 快捷：code=='admin'；生产建议配 WX + 口令）
+        openid = "admin"
+        db.upsert_user(openid, role="admin", marketer_name="管理员")
+        u = db.get_user(openid)
+        return _issue_session(openid, u)
+
+    openid = _openid_from_code(code, role)
+    if not openid:
+        return jsonify({"error": "code2Session failed"}), 502
+
+    oid, err, code_ = _user_gate(openid)
+    if err:
+        return err, code_
+    u = db.get_user(openid)
+    return _issue_session(openid, u)
+
+
+def _issue_session(openid, u):
+    return jsonify({
+        "openid": openid,
+        "role": u["role"],
+        "name": u.get("marketer_name"),
+        "status": u["status"],
+        "admin_password_required": bool(ADMIN_PASSWORD),
+        "token": openid
+    })
+
+
+@app.route("/api/web/login", methods=["POST"])
+def web_login():
+    """
+    Web 版登录（浏览器，无微信）。改为「手机号」登录（与注册一致）。
+    为兼容已部署的旧账号，仍支持用姓名登录（sha1(姓名) 身份）。
+    注册 + 审核通过后方可登录。
+    """
+    body = request.get_json(silent=True) or {}
+    role = body.get("role", "user")
+    if role == "admin":
+        name = (body.get("name") or "管理员").strip() or "管理员"
+        if ADMIN_PASSWORD and (body.get("password") or "") != ADMIN_PASSWORD:
+            return jsonify({"error": "管理员口令错误"}), 401
+        openid = "admin"
+        db.upsert_user(openid, role="admin", marketer_name=name)
+        u = db.get_user(openid)
+        return _issue_session(openid, u)
+
+    phone = (body.get("phone") or "").strip()
+    name = (body.get("name") or "").strip()
+    if phone:
+        openid = "web_" + hashlib.sha1(phone.encode("utf-8")).hexdigest()[:16]
+    elif name:
+        openid = hashlib.sha1(name.encode("utf-8")).hexdigest()[:20]   # 旧姓名登录兼容
+    else:
+        return jsonify({"error": "请输入手机号"}), 400
+
+    oid, err, code_ = _user_gate(openid)
+    if err:
+        return err, code_
+    u = db.get_user(openid)
+    return _issue_session(openid, u)
+
+
+# ---------------------------------------------------------------------------
+# 注册 / 审核
+# ---------------------------------------------------------------------------
+@app.route("/api/register", methods=["POST"])
+def register():
+    """
+    提交注册申请（不再「登录即匹配数据」）。
+    小程序：带 wx.login 的 code；Web：带 phone（平台自行派生 openid）。
+    必填：所属机构 organization、姓名 name、手机号 phone；邮箱 email 选填。
+    """
+    body = request.get_json(silent=True) or {}
+    organization = (body.get("organization") or "").strip()
+    name = (body.get("name") or "").strip()
+    phone = (body.get("phone") or "").strip()
+    email = (body.get("email") or "").strip() or None
+    code = (body.get("code") or "").strip()
+    platform = body.get("platform", "miniprogram")
+
+    if not (organization and name and phone):
+        return jsonify({"error": "请填写所属机构、姓名、手机号"}), 400
+    if not re.match(r"^1[3-9]\d{9}$", phone):
+        return jsonify({"error": "手机号格式不正确"}), 400
+
+    # 派生稳定 openid
+    if platform == "web":
+        openid = "web_" + hashlib.sha1(phone.encode("utf-8")).hexdigest()[:16]
+    elif code:
+        openid = _openid_from_code(code, "user")
+        if not openid:
+            return jsonify({"error": "微信凭证解析失败"}), 502
+    else:
+        return jsonify({"error": "缺少登录凭证(code)"}), 400
+
+    u = db.get_user(openid)
+    if u and u["status"] == "approved":
+        return jsonify({"status": "approved", "message": "该账号已审核通过，可直接登录"})
+    db.register_user(openid, organization, name, phone, email, role="user")
+    return jsonify({"status": "pending", "message": "注册成功，请等待管理员审核"})
+
+
+@app.route("/api/admin/users", methods=["GET"])
+def admin_list_users():
+    oid, err, code_ = _auth_admin()
+    if err:
+        return err, code_
+    status = request.args.get("status")
+    users = db.list_users(status=status)
+    return jsonify({
+        "pending_count": db.count_pending(),
+        "users": [{
+            "openid": u["openid"], "role": u["role"],
+            "name": u.get("marketer_name"), "organization": u.get("organization"),
+            "phone": u.get("phone"), "email": u.get("email"),
+            "status": u["status"], "created_at": u.get("created_at"),
+            "reject_reason": u.get("reject_reason")
+        } for u in users]
+    })
+
+
+@app.route("/api/admin/users/review", methods=["POST"])
+def admin_review_user():
+    oid, err, code_ = _auth_admin()
+    if err:
+        return err, code_
+    body = request.get_json(silent=True) or {}
+    target = (body.get("openid") or "").strip()
+    action = (body.get("action") or "").strip()
+    reason = (body.get("reason") or "").strip() or None
+    if not target or action not in ("approve", "reject"):
+        return jsonify({"error": "参数错误"}), 400
+    u = db.get_user(target)
+    if not u:
+        return jsonify({"error": "用户不存在"}), 404
+    new_status = "approved" if action == "approve" else "rejected"
+    db.set_user_status(target, new_status, reviewed_by=oid, reason=reason)
+    return jsonify({"ok": True, "openid": target, "status": new_status})
+
+
+# ---------------------------------------------------------------------------
+# 通知 / 推送
+# ---------------------------------------------------------------------------
+@app.route("/api/my/notification", methods=["GET"])
+def get_notification():
+    oid, err, code_ = require_openid()
+    if err:
+        return err, code_
+    n = db.get_notif(oid)
+    if not n:
+        return jsonify({"channels": [], "email": None, "wx_subscribed": 0})
+    return jsonify({
+        "channels": json.loads(n["channels"] or "[]"),
+        "email": n["email"],
+        "wx_subscribed": n["wx_subscribed"]
+    })
+
+
+@app.route("/api/my/notification", methods=["POST"])
+def set_notification():
+    oid, err, code_ = require_openid()
+    if err:
+        return err, code_
+    body = request.get_json(silent=True) or {}
+    channels = body.get("channels") or []
+    email = (body.get("email") or "").strip() or None
+    allowed = {"miniprogram", "email"}
+    channels = [c for c in channels if c in allowed]
+    if "email" in channels and not email:
+        return jsonify({"error": "启用邮件提醒需填写邮箱地址"}), 400
+    db.set_notif(oid, json.dumps(channels, ensure_ascii=False), email)
+    return jsonify({"ok": True, "channels": channels, "email": email})
+
+
+@app.route("/api/my/notification/subscribe", methods=["POST"])
+def notif_subscribe():
+    """记录小程序订阅消息授权结果（客户端 wx.requestSubscribeMessage 成功后回调）。"""
+    oid, err, code_ = require_openid()
+    if err:
+        return err, code_
+    body = request.get_json(silent=True) or {}
+    sub = body.get("subscribed", True)
+    if isinstance(sub, str):
+        sub = sub.lower() not in ("false", "0", "no")
+    db.set_notif_subscribed(oid, bool(sub))
+    return jsonify({"ok": True, "wx_subscribed": 1 if sub else 0})
+
+
+@app.route("/api/my/notification/test", methods=["POST"])
+def notif_test():
+    """给当前用户发一条测试提醒（按已开启渠道）。"""
+    oid, err, code_ = require_openid()
+    if err:
+        return err, code_
+    n = db.get_notif(oid) or {"channels": "[]", "email": None, "wx_subscribed": 0}
+    channels = json.loads(n["channels"] or "[]")
+    u = db.get_user(oid)
+    ratings = db.get_my_ratings(oid)
+    results = []
+    for ch in channels:
+        if ch == "email":
+            to = n["email"] or u.get("email")
+            if to:
+                ok = _send_email(to, "【测试】评级到期提醒", "这是一封测试提醒邮件，您的提醒渠道配置正常。")
+                results.append({"channel": "email", "ok": ok})
+            else:
+                results.append({"channel": "email", "ok": False, "note": "未填写邮箱"})
+        elif ch == "miniprogram":
+            if n["wx_subscribed"] and WX_TEMPLATE_ID and WX_APPID and WX_SECRET:
+                ok = _send_subscribe(oid, ratings[:1])
+                results.append({"channel": "miniprogram", "ok": ok})
+            else:
+                results.append({"channel": "miniprogram", "ok": False,
+                                "note": "未订阅或未配置模板/微信凭证"})
+    return jsonify({"ok": True, "results": results})
+
+
+@app.route("/api/admin/notify/send", methods=["POST"])
+def admin_notify_send():
+    """管理员手动触发：向所有开启渠道的用户推送当前到期/即将到期提醒。"""
+    oid, err, code_ = _auth_admin()
+    if err:
+        return err, code_
+    body = request.get_json(silent=True) or {}
+    dry = bool(body.get("dry_run", False))
+    ref = date.today()
+    users = db.get_approved_users_with_notif()
+    sent, skipped = [], []
+    for u in users:
+        ratings = db.get_my_ratings(u["openid"])
+        due = [r for r in ratings
+               if r["status"] in ("due", "overdue")
+               or (r["remind_date"] and r["remind_date"] <= ref.isoformat())]
+        if not due:
+            continue
+        for ch in u["channels"]:
+            if ch == "email" and u.get("email"):
+                if not dry:
+                    _send_email(u["email"], _notif_subject(due), _notif_body(u, due))
+                sent.append({"openid": u["openid"], "name": u["marketer_name"],
+                             "channel": "email"})
+            elif ch == "miniprogram":
+                if u["wx_subscribed"] and WX_TEMPLATE_ID and WX_APPID and WX_SECRET:
+                    if not dry:
+                        _send_subscribe(u["openid"], due)
+                    sent.append({"openid": u["openid"], "name": u["marketer_name"],
+                                 "channel": "miniprogram"})
+                else:
+                    skipped.append({"openid": u["openid"], "name": u["marketer_name"],
+                                    "channel": "miniprogram", "reason": "未订阅或未配置"})
+    return jsonify({"sent": sent, "skipped": skipped, "user_count": len(users)})
+
+
+# ---- 发送助手（配置驱动，未配置则优雅跳过）----
+def _notif_subject(due):
+    return f"【评级到期提醒】您有 {len(due)} 条评级即将到期/已过期"
+
+
+def _notif_body(u, due):
+    lines = [f"{u.get('marketer_name') or ''} 您好，以下评级项目需要关注："]
+    for r in due[:20]:
+        tag = "已过期" if r["status"] == "overdue" else "即将到期"
+        lines.append(f"- {r['subject']}（到期 {r['expiry_date']} / {tag}）")
+    lines.append("")
+    lines.append("请登录系统查看详情并及时跟进。")
+    return "\n".join(lines)
+
+
+def _send_email(to, subject, body_text):
+    if not (SMTP_HOST and SMTP_USER and SMTP_PASS):
+        print("[notify] SMTP 未配置，跳过邮件发送 ->", to)
+        return False
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        msg = MIMEText(body_text, "plain", "utf-8")
+        msg["Subject"] = subject
+        msg["From"] = SMTP_FROM
+        msg["To"] = to
+        if SMTP_TLS:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as s:
+                s.login(SMTP_USER, SMTP_PASS)
+                s.sendmail(SMTP_FROM, [to], msg.as_string())
+        else:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as s:
+                s.starttls()
+                s.login(SMTP_USER, SMTP_PASS)
+                s.sendmail(SMTP_FROM, [to], msg.as_string())
+        return True
+    except Exception as e:
+        print("[notify] 邮件发送失败:", e)
+        return False
+
+
+_wx_token_cache = {"token": None, "exp": 0}
+
+
+def _wx_access_token():
+    if _wx_token_cache["token"] and _wx_token_cache["exp"] > datetime.now().timestamp() + 60:
+        return _wx_token_cache["token"]
+    if not (WX_APPID and WX_SECRET):
+        return None
+    url = ("https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential"
+           "&appid=%s&secret=%s") % (urllib.parse.quote(WX_APPID),
+                                     urllib.parse.quote(WX_SECRET))
+    try:
+        with urllib.request.urlopen(url, timeout=6) as r:
+            d = json.loads(r.read())
+    except Exception as e:
+        print("[notify] 获取 access_token 失败:", e)
+        return None
+    if d.get("access_token"):
+        _wx_token_cache["token"] = d["access_token"]
+        _wx_token_cache["exp"] = datetime.now().timestamp() + d.get("expires_in", 7200)
+        return d["access_token"]
+    return None
+
+
+def _send_subscribe(openid, ratings):
+    """微信订阅消息发送（一次性订阅，需用户此前已授权）。"""
+    token = _wx_access_token()
+    if not token or not WX_TEMPLATE_ID:
+        return False
+    default_map = {"thing1": "{subject}", "time2": "{expiry}", "thing3": "{count}条评级待关注"}
+    fmap = default_map
+    if WX_TEMPLATE_DATA:
+        try:
+            fmap = json.loads(WX_TEMPLATE_DATA)
+        except Exception:
+            fmap = default_map
+    top = ratings[0] if ratings else {}
+    subj = (top.get("subject") or "")[:20]
+    expiry = top.get("expiry_date") or ""
+    count = len(ratings)
+    data = {k: {"value": str(v).format(subject=subj, expiry=expiry, count=count)}
+            for k, v in fmap.items()}
+    payload = {"touser": openid, "template_id": WX_TEMPLATE_ID, "data": data}
+    url = ("https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=%s"
+           % urllib.parse.quote(token))
+    try:
+        req = urllib.request.Request(
+            url, data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=6) as r:
+            d = json.loads(r.read())
+        if d.get("errcode") == 0:
+            return True
+        print("[notify] subscribe send err:", d)
+        return False
+    except Exception as e:
+        print("[notify] subscribe send fail:", e)
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -467,10 +848,35 @@ def demo_seed():
     return jsonify({"seed": "ok", "marketers": list(by_m.keys()), "stats": stats})
 
 
+@app.route("/api/config", methods=["GET"])
+def web_config():
+    """前端据此决定是否显示管理员口令框 / demo 按钮 / 注册入口，以及渠道可用性。"""
+    return jsonify({
+        "admin_password_required": bool(ADMIN_PASSWORD),
+        "demo_enabled": bool(os.environ.get("ENABLE_DEMO")),
+        "registration_enabled": True,
+        "channels": {
+            "miniprogram": bool(WX_APPID and WX_SECRET and WX_TEMPLATE_ID),
+            "email": bool(SMTP_HOST and SMTP_USER and SMTP_PASS)
+        },
+        "wx_template_id": WX_TEMPLATE_ID or ""
+    })
+
+
+def _static(name):
+    return send_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), name))
+
+
 @app.route("/")
 def index():
-    return send_file(os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                  "preview.html"))
+    """正式 Web 前端（面向浏览器用户）。"""
+    return _static("webapp.html")
+
+
+@app.route("/preview")
+def preview():
+    """旧的演示预览页（保留，硬编码身份切换，仅联调用）。"""
+    return _static("preview.html")
 
 
 if __name__ == "__main__":

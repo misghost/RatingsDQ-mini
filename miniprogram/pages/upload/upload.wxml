@@ -1,0 +1,36 @@
+<view class="wrap">
+  <!-- 未登录提示 -->
+  <view wx:if="{{!loggedIn}}" class="need-login">
+    <text class="nl-icon">📤</text>
+    <text class="nl-title">登录后上传数据</text>
+    <text class="nl-desc">请先登录，再使用数据上传功能</text>
+    <button class="btn-go-login" bindtap="goLogin">去登录</button>
+  </view>
+
+  <!-- 已登录：上传界面 -->
+  <block wx:if="{{loggedIn}}">
+  <view wx:if="{{role !== 'admin'}}" class="section">
+    <view class="sec-title">市场人员 · 上传你的数据</view>
+    <button class="up-btn" data-type="contract" bindtap="chooseAndUpload">上传 合同管理.xlsx（精准归属）</button>
+    <button class="up-btn ghost" data-type="chenlan" bindtap="chooseAndUpload">上传 承揽立项.xlsx（兜底）</button>
+    <button class="up-btn ghost" data-type="zuoye" bindtap="chooseAndUpload">上传 项目作业.xlsx（兜底）</button>
+    <view class="tip">合同号唯一的文件优先级最高，可精准匹配你的评级。</view>
+  </view>
+
+  <view wx:if="{{role === 'admin'}}" class="section">
+    <view class="sec-title">管理员 · 上传后台源数据</view>
+    <button class="up-btn" data-type="admin" bindtap="chooseAndUpload">上传 项目查询导出.xls</button>
+    <view class="tip">上传后自动重算全员归属与到期提醒。</view>
+  </view>
+
+  <view wx:if="{{marketers.length > 0}}" class="section">
+    <view class="sec-title">选择你的身份</view>
+    <picker mode="selector" range="{{marketers}}" bindchange="onMarketPick">
+      <view class="picker">{{marketAs || '点击选择「我是谁」'}}</view>
+    </picker>
+  </view>
+
+  <view wx:if="{{msg}}" class="msg">{{msg}}</view>
+  <view wx:if="{{resultText}}" class="result">{{resultText}}</view>
+  </block>
+</view>

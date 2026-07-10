@@ -1,0 +1,29 @@
+<view class="login-wrap">
+  <view class="logo">评级到期提醒</view>
+  <view class="sub">登录后可查看个人专属到期提醒、上传合同数据</view>
+
+  <!-- 错误提示（友好展示，不弹 toast） -->
+  <view wx:if="{{errMsg}}" class="err-banner">
+    <text>{{errMsg}}</text>
+  </view>
+
+  <view class="card role-card">
+    <view class="role-row">
+      <text>以管理员身份登录</text>
+      <switch checked="{{isAdmin}}" bindchange="toggleRole" color="#07c160" />
+    </view>
+    <view class="muted sm">管理员可上传后台源数据、查看全员总览</view>
+  </view>
+
+  <button class="btn-primary login-btn" loading="{{loading}}" bindtap="doLogin">
+    {{isAdmin ? '管理员登录' : '微信登录'}}
+  </button>
+
+  <view class="skip-row" bindtap="skipLogin">
+    <text class="skip-text">暂不登录，先浏览</text>
+  </view>
+
+  <view class="skip-row" bindtap="goRegister">
+    <text class="skip-text">还没有账号？去注册 ›</text>
+  </view>
+</view>

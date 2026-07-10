@@ -1,0 +1,55 @@
+<view class="wrap">
+  <!-- 未登录 -->
+  <view wx:if="{{!loggedIn}}" class="need-login">
+    <text class="nl-icon">🔔</text>
+    <text class="nl-title">登录后设置提醒</text>
+    <text class="nl-desc">请先登录账号，再配置提醒方式</text>
+    <button class="btn-go-login" bindtap="goLogin">去登录</button>
+  </view>
+
+  <block wx:else>
+    <view class="card">
+      <view class="sec-title">提醒方式</view>
+
+      <view class="row" bindtap="toggle" data-f="miniprogram">
+        <view class="row-main">
+          <text class="t">小程序服务提醒</text>
+          <text class="d">通过微信订阅消息推送（需在本小程序内授权）</text>
+        </view>
+        <switch checked="{{channels.miniprogram}}" color="#07c160"
+                bindtap="toggle" data-f="miniprogram" />
+      </view>
+
+      <view class="row" bindtap="toggle" data-f="email">
+        <view class="row-main">
+          <text class="t">邮件提醒</text>
+          <text class="d">发送至下方邮箱地址</text>
+        </view>
+        <switch checked="{{channels.email}}" color="#07c160"
+                bindtap="toggle" data-f="email" />
+      </view>
+
+      <view class="field" wx:if="{{channels.email}}">
+        <text class="lbl">邮箱地址</text>
+        <input placeholder="name@company.com" value="{{email}}" bindinput="onEmail" />
+      </view>
+
+      <button class="btn-primary" loading="{{loading}}" bindtap="save">保存设置</button>
+    </view>
+
+    <view class="card" wx:if="{{channels.miniprogram}}">
+      <view class="sec-title">小程序订阅</view>
+      <view class="muted sm">微信订阅消息为一次性授权，点击下方按钮完成授权后，管理员推送时即可收到服务提醒。</view>
+      <view class="sub-state">当前订阅状态：{{wx_subscribed ? '已授权' : '未授权'}}</view>
+      <button class="btn-ghost" bindtap="subscribe">授权小程序服务提醒</button>
+    </view>
+
+    <view class="card">
+      <view class="sec-title">测试</view>
+      <view class="muted sm">向当前账号已开启的渠道发送一条测试提醒，验证配置是否生效。</view>
+      <button class="btn-grey" bindtap="test">发送测试提醒</button>
+    </view>
+
+    <view wx:if="{{msg}}" class="msg">{{msg}}</view>
+  </block>
+</view>
