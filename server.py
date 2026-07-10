@@ -763,6 +763,196 @@ def upload_admin_source():
 
 
 # ---------------------------------------------------------------------------
+# 管理员：报告数据 CRUD（admin_source：评级真相，可单条增/改/删/恢复）
+# ---------------------------------------------------------------------------
+_RATING_FIELDS = ["subject", "contract_no", "li_date", "issuance",
+                  "issuance_source", "project_type", "debt_type",
+                  "rating", "outlook", "notes"]
+
+
+@app.route("/api/admin/report", methods=["GET"])
+def admin_report_list():
+    oid, err, code = _auth_admin()
+    if err:
+        return err, code
+    q = request.args.get("q", "").strip()
+    sort = request.args.get("sort", "id")
+    order = request.args.get("order", "asc")
+    try:
+        page = int(request.args.get("page", 1))
+        page_size = int(request.args.get("page_size", 50))
+    except ValueError:
+        page, page_size = 1, 50
+    include_del = request.args.get("include_deleted") == "1"
+    data = db.list_admin_ratings(q=q, sort=sort, order=order,
+                                 page=page, page_size=page_size,
+                                 include_deleted=include_del)
+    return jsonify(data)
+
+
+@app.route("/api/admin/report/<int:rid>", methods=["GET"])
+def admin_report_get(rid):
+    oid, err, code = _auth_admin()
+    if err:
+        return err, code
+    rec = db.get_admin_rating(rid, include_deleted=True)
+    if not rec:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(rec)
+
+
+@app.route("/api/admin/report", methods=["POST"])
+def admin_report_add():
+    oid, err, code = _auth_admin()
+    if err:
+        return err, code
+    b = request.get_json(silent=True) or {}
+    subject = (b.get("subject") or "").strip()
+    if not subject:
+        return jsonify({"error": "主体(机构名称)为必填项"}), 400
+    li_date = _norm_date(b.get("li_date"))
+    issuance = _norm_date(b.get("issuance"))
+    if (b.get("li_date") and li_date is None) or (b.get("issuance") and issuance is None):
+        return jsonify({"error": "日期格式应为 YYYY-MM-DD"}), 422
+    # 智能去重：相同 主体/合同号/出具日 视为重复
+    dup = db.find_duplicate_report(subject, b.get("contract_no", ""), issuance)
+    if dup:
+        return jsonify({"error": f"已存在相同 主体/合同号/出具日 的记录（#{dup}），请勿重复录入",
+                        "duplicate_id": dup}), 409
+    rec = {
+        "subject": subject,
+        "contract_no": (b.get("contract_no") or "").strip(),
+        "li_date": li_date,
+        "issuance": issuance,
+        "issuance_source": b.get("issuance_source") or None,
+        "project_type": (b.get("project_type") or "").strip(),
+        "debt_type": (b.get("debt_type") or "").strip(),
+        "rating": (b.get("rating") or "").strip(),
+        "outlook": (b.get("outlook") or "").strip(),
+        "notes": (b.get("notes") or "").strip(),
+    }
+    rid = db.add_admin_rating(rec)
+    db.log_audit(oid, "report:add", target=str(rid),
+                 detail=f"{subject} / {rec['contract_no']} / {rec['issuance']}")
+    run_compute()
+    return jsonify({"id": rid, "ok": True}), 201
+
+
+@app.route("/api/admin/report/<int:rid>", methods=["PUT"])
+def admin_report_update(rid):
+    oid, err, code = _auth_admin()
+    if err:
+        return err, code
+    cur = db.get_admin_rating(rid, include_deleted=True)
+    if not cur:
+        return jsonify({"error": "not found"}), 404
+    b = request.get_json(silent=True) or {}
+    fields = {}
+    for k in _RATING_FIELDS:
+        if k in b:
+            v = b[k]
+            if k in ("li_date", "issuance"):
+                v = _norm_date(v)
+                if v is None and b[k] not in (None, ""):
+                    return jsonify({"error": f"{k} 日期格式应为 YYYY-MM-DD"}), 422
+            elif k == "issuance_source":
+                v = v or None
+            else:
+                v = (v or "").strip()
+            fields[k] = v
+    # 去重检查（排除自身）
+    if ("subject" in fields or "contract_no" in fields or "issuance" in fields):
+        subj = fields.get("subject", cur["subject"])
+        cno = fields.get("contract_no", cur["contract_no"])
+        iss = fields.get("issuance", cur["issuance"])
+        dup = db.find_duplicate_report(subj, cno, iss, exclude_id=rid)
+        if dup:
+            return jsonify({"error": f"会与记录 #{dup} 重复（相同 主体/合同号/出具日）",
+                            "duplicate_id": dup}), 409
+    db.update_admin_rating(rid, fields)
+    changed = ", ".join(f"{k}={fields[k]}" for k in fields)
+    db.log_audit(oid, "report:update", target=str(rid),
+                 detail=f"{cur['subject']} → {changed}")
+    run_compute()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/report/<int:rid>", methods=["DELETE"])
+def admin_report_delete(rid):
+    oid, err, code = _auth_admin()
+    if err:
+        return err, code
+    cur = db.get_admin_rating(rid, include_deleted=True)
+    if not cur:
+        return jsonify({"error": "not found"}), 404
+    db.soft_delete_admin_rating(rid)
+    db.log_audit(oid, "report:delete", target=str(rid),
+                 detail=f"{cur['subject']}（移入回收站）")
+    run_compute()
+    return jsonify({"ok": True, "trashed": True})
+
+
+@app.route("/api/admin/report/<int:rid>/restore", methods=["POST"])
+def admin_report_restore(rid):
+    oid, err, code = _auth_admin()
+    if err:
+        return err, code
+    cur = db.get_admin_rating(rid, include_deleted=True)
+    if not cur:
+        return jsonify({"error": "not found"}), 404
+    db.restore_admin_rating(rid)
+    db.log_audit(oid, "report:restore", target=str(rid), detail=cur["subject"])
+    run_compute()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/admin/report/trash", methods=["GET"])
+def admin_report_trash():
+    oid, err, code = _auth_admin()
+    if err:
+        return err, code
+    return jsonify({"items": db.list_trashed()})
+
+
+@app.route("/api/admin/report/health", methods=["GET"])
+def admin_report_health():
+    oid, err, code = _auth_admin()
+    if err:
+        return err, code
+    return jsonify(db.admin_source_health())
+
+
+@app.route("/api/admin/report/batch-delete", methods=["POST"])
+def admin_report_batch_delete():
+    oid, err, code = _auth_admin()
+    if err:
+        return err, code
+    b = request.get_json(silent=True) or {}
+    ids = [int(x) for x in (b.get("ids") or []) if str(x).isdigit()]
+    if not ids:
+        return jsonify({"error": "ids required"}), 400
+    n = db.batch_soft_delete(ids)
+    db.log_audit(oid, "report:batch-delete", detail=f"{n} 条 → 回收站")
+    run_compute()
+    return jsonify({"ok": True, "deleted": n})
+
+
+@app.route("/api/admin/report/batch-restore", methods=["POST"])
+def admin_report_batch_restore():
+    oid, err, code = _auth_admin()
+    if err:
+        return err, code
+    b = request.get_json(silent=True) or {}
+    ids = [int(x) for x in (b.get("ids") or []) if str(x).isdigit()]
+    if not ids:
+        return jsonify({"error": "ids required"}), 400
+    n = db.batch_restore(ids)
+    db.log_audit(oid, "report:batch-restore", detail=f"{n} 条恢复")
+    run_compute()
+    return jsonify({"ok": True, "restored": n})
+
+
+# ---------------------------------------------------------------------------
 # 上传：市场人员合同管理（合同号 join 主归属）
 # ---------------------------------------------------------------------------
 @app.route("/api/upload/contract", methods=["POST"])
@@ -910,6 +1100,8 @@ def run_compute(ref_date=None):
             "attribution": reason,
             "source": "admin_source",
             "extra": {"issuance_source": rec["issuance_source"]},
+            "rating": rec.get("rating"),
+            "outlook": rec.get("outlook"),
         })
 
     # 按 (openid, subject, debt_type) 去重，取最新出具时间
@@ -1003,6 +1195,8 @@ def _public(r):
         "debt_type": r["debt_type"],
         "project_type": r["project_type"],
         "attribution": r["attribution"],
+        "rating": r.get("rating") or "",
+        "outlook": r.get("outlook") or "",
         "renewed": r.get("renewed", 0),
         "renewed_at": r.get("renewed_at"),
     }
@@ -1013,6 +1207,21 @@ def _save_tmp(f, suffix):
     with os.fdopen(fd, "wb") as fp:
         fp.write(f.read())
     return path
+
+
+def _norm_date(v):
+    """接受 YYYY-MM-DD（兼容 / 分隔），返回 ISO 字符串；空/非法返回 None。"""
+    if v in (None, ""):
+        return None
+    if isinstance(v, str):
+        v = v.strip().replace("/", "-")
+        if not v:
+            return None
+        try:
+            return date.fromisoformat(v).isoformat()
+        except ValueError:
+            return None
+    return None
 
 
 @app.route("/api/health", methods=["GET"])

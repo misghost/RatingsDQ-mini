@@ -511,6 +511,41 @@
       <div class="msg" id="seedMsg"></div>
     </div>
   </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <h2 style="margin:0">报告数据管理 <span class="badge">评级真相</span></h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn primary" onclick="openReportModal(0)">＋ 新增报告</button>
+        <button class="link" onclick="toggleHealth()">🩺 数据体检 <span id="healthBadge" class="badge hide"></span></button>
+        <button class="link" id="trashBtn" onclick="toggleTrash()">🗑 回收站</button>
+        <button class="link hide" id="batchDelBtn" onclick="batchDeleteReports()">批量删除选中</button>
+        <button class="link" onclick="loadReports()">🔄 刷新</button>
+      </div>
+    </div>
+    <div class="searchbar" style="margin:10px 0">
+      <input type="text" id="repQ" placeholder="搜索主体 / 合同号 / 备注…" oninput="onRepSearch()">
+    </div>
+    <div id="healthBox" class="hide" style="margin:6px 0 12px;padding:12px;background:#fafbff;border:1px solid #eef1f8;border-radius:12px"></div>
+    <div class="tbl-wrap">
+      <table id="repTable">
+        <thead><tr>
+          <th style="width:30px"><input type="checkbox" id="repSelAll" onclick="toggleSelAll(this)"></th>
+          <th onclick="repSort('subject')">主体 ⇅</th>
+          <th onclick="repSort('contract_no')">合同号 ⇅</th>
+          <th onclick="repSort('rating')">评级 ⇅</th>
+          <th onclick="repSort('outlook')">展望 ⇅</th>
+          <th onclick="repSort('li_date')">立项日 ⇅</th>
+          <th onclick="repSort('issuance')">出具日 ⇅</th>
+          <th>类型</th><th>债务</th><th>备注</th>
+          <th style="width:110px">操作</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div class="pager" id="repPager"></div>
+    <div class="msg" id="repMsg"></div>
+  </div>
 </div>
 
 <!-- 下钻弹窗 -->
@@ -524,6 +559,60 @@
       <input type="text" id="drillSearch" placeholder="搜索该市场人员客户…" oninput="onDrillSearch()">
     </div>
     <div class="ratings" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- 报告新增/编辑弹窗 -->
+<div class="modal-mask hide" id="repMask" onclick="if(event.target===this)closeRepModal()">
+  <div class="modal" style="max-width:580px">
+    <div class="toolbar" style="margin-bottom:12px">
+      <h3 id="repModalTitle" style="margin:0">新增报告</h3>
+      <button class="link" onclick="closeRepModal()">关闭</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <div><label style="font-size:12px;color:var(--sub)">主体 / 机构名称 *</label>
+        <input id="repSubject" type="text" placeholder="如 某集团有限公司"></div>
+      <div style="display:flex;gap:10px">
+        <div style="flex:1"><label style="font-size:12px;color:var(--sub)">合同号</label>
+          <input id="repContract" type="text"></div>
+        <div style="flex:1"><label style="font-size:12px;color:var(--sub)">评级等级</label>
+          <input id="repRating" type="text" list="ratingList" placeholder="如 AA+"></div>
+      </div>
+      <datalist id="ratingList">
+        <option value="AAA"></option><option value="AA+"></option><option value="AA"></option>
+        <option value="AA-"></option><option value="A+"></option><option value="A"></option>
+        <option value="A-"></option><option value="BBB+"></option><option value="BBB"></option>
+        <option value="BBB-"></option><option value="BB"></option><option value="B"></option>
+        <option value="CCC"></option><option value="CC"></option><option value="C"></option>
+        <option value="D"></option><option value="NR"></option>
+      </datalist>
+      <div style="display:flex;gap:10px">
+        <div style="flex:1"><label style="font-size:12px;color:var(--sub)">评级展望</label>
+          <select id="repOutlook">
+            <option value="">—</option><option>稳定</option><option>正面</option>
+            <option>负面</option><option>待定</option><option>发展中</option>
+          </select></div>
+        <div style="flex:1"><label style="font-size:12px;color:var(--sub)">出具日 *</label>
+          <input id="repIssuance" type="date"></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <div style="flex:1"><label style="font-size:12px;color:var(--sub)">立项日</label>
+          <input id="repLi" type="date"></div>
+        <div style="flex:1"><label style="font-size:12px;color:var(--sub)">项目类型</label>
+          <input id="repProject" type="text" placeholder="如 公司债"></div>
+      </div>
+      <div><label style="font-size:12px;color:var(--sub)">债务类型</label>
+        <input id="repDebt" type="text" placeholder="如 一般企业债"></div>
+      <div><label style="font-size:12px;color:var(--sub)">备注</label>
+        <textarea id="repNotes" rows="2" placeholder="内部备注 / 跟进情况"></textarea></div>
+      <div class="msg" id="repFormMsg"></div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="btn primary" onclick="saveReport()">保存</button>
+        <button class="btn grey" onclick="closeRepModal()">取消</button>
+      </div>
+      <div class="sec-title hide" id="repAuditTitle" style="margin-top:14px">变更记录</div>
+      <div id="repAuditList" style="font-size:12px;color:var(--sub)"></div>
+    </div>
   </div>
 </div>
 
@@ -778,6 +867,7 @@ function render(){
       document.getElementById("demoBox").classList.toggle("hide", !CFG.demo_enabled);
       loadOverview();
       loadUsers();
+      if(API) loadReports();
     } else {
       loadMy();
       loadNotification();
@@ -860,6 +950,7 @@ function renderCards(list){
       <span class="st ${badgeCls}">${statusLabel}</span>
       <div class="name">${esc(r.subject)}</div>
       <div class="meta">
+        评级：<b style="color:var(--primary)">${esc(r.rating)||"—"}</b>　展望：${esc(r.outlook)||"—"}<br>
         合同号：${esc(r.contract_no)||"—"}　${daysText(r.expiry_date,r.status)}<br>
         到期日：<b>${r.expiry_date||"—"}</b>　提醒日：${r.remind_date||"—"}<br>
         类型：${esc(r.debt_type)||"—"}${r.project_type?" ｜ "+esc(r.project_type):""} ｜ 归属：${attr}
@@ -1130,6 +1221,170 @@ async function loadAudit(){
 
 /* ---------- 工具 ---------- */
 function esc(s){ return (s==null?"":String(s)).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+/* ---------- 管理员：报告数据管理（增/改/删/回收站/体检/批量） ---------- */
+let REP_Q="", REP_SORT="id", REP_ORDER="asc", REP_PAGE=1, REP_PAGE_SIZE=20;
+let REP_SELECTED=new Set(), REP_TRASH=false, REP_EDIT_ID=0;
+function repTbody(){ return document.getElementById("repTable").querySelector("tbody"); }
+function repChip(v){ return v?`<span style="display:inline-block;padding:1px 7px;border-radius:6px;background:rgba(37,99,235,.1);color:#2563eb;font-weight:700;font-size:12px">${esc(v)}</span>`:'<span style="color:var(--sub)">—</span>'; }
+
+async function loadReports(){
+  if(REP_TRASH){ await loadTrash(); return; }
+  const tb=repTbody(); tb.innerHTML='<tr><td colspan="11" class="empty">加载中…</td></tr>';
+  let q=`?sort=${encodeURIComponent(REP_SORT)}&order=${REP_ORDER}&page=${REP_PAGE}&page_size=${REP_PAGE_SIZE}`;
+  if(REP_Q) q+=`&q=${encodeURIComponent(REP_Q)}`;
+  const r=await api("/api/admin/report"+q);
+  if(r.status!==200){ tb.innerHTML=`<tr><td colspan="11" class="empty">加载失败：${r.body.error||r.status}</td></tr>`; return; }
+  const list=r.body.items||[];
+  if(!list.length){ tb.innerHTML='<tr><td colspan="11" class="empty">暂无报告数据。点「＋ 新增报告」手动录入，或在上方「后台源数据」上传 Excel 全量刷新。</td></tr>'; document.getElementById("repPager").innerHTML=""; return; }
+  tb.innerHTML=list.map(x=>`
+    <tr>
+      <td><input type="checkbox" data-id="${x.id}" ${REP_SELECTED.has(x.id)?"checked":""} onchange="onRepChk(this)"></td>
+      <td><b>${esc(x.subject)}</b></td>
+      <td>${esc(x.contract_no)}</td>
+      <td>${repChip(x.rating)}</td>
+      <td>${x.outlook?esc(x.outlook):'<span style="color:var(--sub)">—</span>'}</td>
+      <td>${x.li_date||"—"}</td>
+      <td>${x.issuance||'<span style="color:#e5484d">缺失</span>'}</td>
+      <td>${esc(x.project_type)}</td>
+      <td>${esc(x.debt_type)}</td>
+      <td style="color:var(--sub);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.notes)}">${esc(x.notes)||"—"}</td>
+      <td>
+        <button class="link" onclick="openReportModal(${x.id})">编辑</button>
+        <button class="link" style="color:#e5484d" onclick="deleteReport(${x.id})">删除</button>
+      </td>
+    </tr>`).join("");
+  const total=r.body.total||0, pages=Math.max(1,Math.ceil(total/REP_PAGE_SIZE));
+  document.getElementById("repPager").innerHTML=
+    `<span style="color:var(--sub);font-size:12px">共 ${total} 条 · 第 ${REP_PAGE}/${pages} 页</span> `+
+    `<button class="link" ${REP_PAGE<=1?"disabled":""} onclick="repGo(${REP_PAGE-1})">上一页</button>`+
+    `<button class="link" ${REP_PAGE>=pages?"disabled":""} onclick="repGo(${REP_PAGE+1})">下一页</button>`;
+}
+function repGo(p){ REP_PAGE=p; loadReports(); }
+function repSort(f){ if(REP_SORT===f){ REP_ORDER=REP_ORDER==="asc"?"desc":"asc"; } else { REP_SORT=f; REP_ORDER="asc"; } loadReports(); }
+function onRepSearch(){ REP_Q=document.getElementById("repQ").value.trim(); REP_PAGE=1; loadReports(); }
+function onRepChk(cb){ const id=+cb.dataset.id; cb.checked?REP_SELECTED.add(id):REP_SELECTED.delete(id); updateBatchBtn(); }
+function toggleSelAll(cb){ repTbody().querySelectorAll('input[type=checkbox]').forEach(c=>{ c.checked=cb.checked; const id=+c.dataset.id; cb.checked?REP_SELECTED.add(id):REP_SELECTED.delete(id); }); updateBatchBtn(); }
+function updateBatchBtn(){ const b=document.getElementById("batchDelBtn"); REP_SELECTED.size>0?b.classList.remove("hide"):b.classList.add("hide"); }
+
+async function openReportModal(id){
+  REP_EDIT_ID=id; REP_TRASH=false;
+  const m=document.getElementById("repFormMsg"); m.className="msg"; m.textContent="";
+  document.getElementById("repAuditTitle").classList.add("hide");
+  document.getElementById("repAuditList").innerHTML="";
+  const ids=["repSubject","repContract","repRating","repOutlook","repIssuance","repLi","repProject","repDebt","repNotes"];
+  if(id){
+    document.getElementById("repModalTitle").textContent="编辑报告 #"+id;
+    const r=await api("/api/admin/report/"+id+"?include_deleted=1");
+    if(r.status===200){ const x=r.body;
+      document.getElementById("repSubject").value=x.subject||"";
+      document.getElementById("repContract").value=x.contract_no||"";
+      document.getElementById("repRating").value=x.rating||"";
+      document.getElementById("repOutlook").value=x.outlook||"";
+      document.getElementById("repIssuance").value=x.issuance||"";
+      document.getElementById("repLi").value=x.li_date||"";
+      document.getElementById("repProject").value=x.project_type||"";
+      document.getElementById("repDebt").value=x.debt_type||"";
+      document.getElementById("repNotes").value=x.notes||"";
+      loadReportAudit(id);
+    }
+  } else {
+    document.getElementById("repModalTitle").textContent="新增报告";
+    ids.forEach(i=>document.getElementById(i).value="");
+  }
+  document.getElementById("repMask").classList.remove("hide");
+}
+function closeRepModal(){ document.getElementById("repMask").classList.add("hide"); }
+async function loadReportAudit(id){
+  const r=await api("/api/admin/audit?page=1");
+  if(r.status!==200) return;
+  const items=(r.body.items||[]).filter(it=>String(it.target)===String(id));
+  const box=document.getElementById("repAuditList");
+  if(!items.length){ document.getElementById("repAuditTitle").classList.add("hide"); box.innerHTML=""; return; }
+  document.getElementById("repAuditTitle").classList.remove("hide");
+  box.innerHTML=items.map(it=>`<div style="padding:3px 0;border-bottom:1px solid #eee">[${esc((it.created_at||"").replace("T"," ").slice(0,19))}] <b>${esc(it.actor_name||it.actor_openid||"—")}</b> ${esc(it.action)} — ${esc(it.detail||"")}</div>`).join("");
+}
+async function saveReport(){
+  const m=document.getElementById("repFormMsg");
+  const subject=document.getElementById("repSubject").value.trim();
+  if(!subject){ m.className="msg err"; m.textContent="请填写主体(机构名称)"; return; }
+  const iss=document.getElementById("repIssuance").value, li=document.getElementById("repLi").value;
+  if(iss && !/^\d{4}-\d{2}-\d{2}$/.test(iss)){ m.className="msg err"; m.textContent="出具日格式应为 YYYY-MM-DD"; return; }
+  if(li && !/^\d{4}-\d{2}-\d{2}$/.test(li)){ m.className="msg err"; m.textContent="立项日格式应为 YYYY-MM-DD"; return; }
+  const payload={
+    subject, contract_no:document.getElementById("repContract").value.trim(),
+    rating:document.getElementById("repRating").value.trim(),
+    outlook:document.getElementById("repOutlook").value,
+    issuance:iss, li_date:li,
+    project_type:document.getElementById("repProject").value.trim(),
+    debt_type:document.getElementById("repDebt").value.trim(),
+    notes:document.getElementById("repNotes").value.trim()
+  };
+  m.className="msg"; m.textContent="保存中…";
+  const isEdit=REP_EDIT_ID>0;
+  const r=await api("/api/admin/report"+(isEdit?"/"+REP_EDIT_ID:""),
+    { method:isEdit?"PUT":"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload) });
+  if(r.status===200||r.status===201){ closeRepModal(); loadReports(); }
+  else if(r.status===409){ m.className="msg err"; m.textContent="⚠️ "+((r.body&&r.body.error)||"重复记录"); }
+  else { m.className="msg err"; m.textContent="❌ "+((r.body&&r.body.error)||JSON.stringify(r.body)); }
+}
+async function deleteReport(id){
+  if(!confirm("确定将报告 #"+id+" 移入回收站？回收站内可随时恢复。")) return;
+  const r=await api("/api/admin/report/"+id,{method:"DELETE"});
+  if(r.status===200) loadReports(); else alert("删除失败："+(r.body.error||r.status));
+}
+async function toggleTrash(){
+  REP_TRASH=!REP_TRASH;
+  document.getElementById("trashBtn").textContent=REP_TRASH?"↩ 返回列表":"🗑 回收站";
+  loadReports();
+}
+async function loadTrash(){
+  const tb=repTbody(); tb.innerHTML='<tr><td colspan="11" class="empty">加载中…</td></tr>';
+  const r=await api("/api/admin/report/trash");
+  if(r.status!==200){ tb.innerHTML=`<tr><td colspan="11" class="empty">加载失败</td></tr>`; return; }
+  const list=r.body.items||[];
+  if(!list.length){ tb.innerHTML='<tr><td colspan="11" class="empty">回收站为空 🎉</td></tr>'; document.getElementById("repPager").innerHTML=""; return; }
+  tb.innerHTML=list.map(x=>`
+    <tr style="opacity:.85">
+      <td></td><td><b>${esc(x.subject)}</b></td><td>${esc(x.contract_no)}</td>
+      <td>${repChip(x.rating)}</td><td>${x.outlook?esc(x.outlook):"—"}</td>
+      <td>${x.li_date||"—"}</td><td>${x.issuance||"—"}</td>
+      <td>${esc(x.project_type)}</td><td>${esc(x.debt_type)}</td>
+      <td style="color:var(--sub)">${esc(x.notes)||"—"}</td>
+      <td><button class="link" onclick="restoreReport(${x.id})">恢复</button></td>
+    </tr>`).join("");
+  document.getElementById("repPager").innerHTML="";
+}
+async function restoreReport(id){
+  const r=await api("/api/admin/report/"+id+"/restore",{method:"POST"});
+  if(r.status===200) loadReports(); else alert("恢复失败："+(r.body.error||r.status));
+}
+async function batchDeleteReports(){
+  if(!REP_SELECTED.size) return;
+  if(!confirm("将选中的 "+REP_SELECTED.size+" 条报告移入回收站？")) return;
+  const r=await api("/api/admin/report/batch-delete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ids:[...REP_SELECTED]})});
+  if(r.status===200){ REP_SELECTED.clear(); updateBatchBtn(); loadReports(); }
+  else alert("批量删除失败："+(r.body.error||r.status));
+}
+async function toggleHealth(){
+  const box=document.getElementById("healthBox");
+  if(!box.classList.contains("hide")){ box.classList.add("hide"); return; }
+  const r=await api("/api/admin/report/health");
+  if(r.status!==200){ box.classList.remove("hide"); box.innerHTML='<div class="msg err">体检失败</div>'; return; }
+  const d=r.body;
+  const color=d.score>=90?"#2bb673":d.score>=70?"#e8a33d":"#e5484d";
+  const lvl=l=> l==="high"?'<b style="color:#e5484d">严重</b>':l==="mid"?'<b style="color:#e8a33d">一般</b>':'<span style="color:var(--sub)">提示</span>';
+  let html=`<div style="display:flex;align-items:center;gap:14px;margin-bottom:8px">
+      <div style="font-size:30px;font-weight:800;color:${color}">${d.score}<span style="font-size:14px;color:var(--sub)">/100</span></div>
+      <div style="font-size:13px;color:var(--sub)">数据健康分 · 共 ${d.total} 条 · 问题 ${d.issues.length} 个（严重 ${d.counts.high} / 一般 ${d.counts.mid} / 提示 ${d.counts.low}）</div>
+    </div>`;
+  html += d.issues.length
+    ? '<div style="max-height:200px;overflow:auto">'+d.issues.map(it=>`<div style="padding:4px 0;border-top:1px solid #f0f0f0;font-size:13px">${lvl(it.level)} · #${it.id} ${esc(it.subject)} — ${esc(it.msg)}</div>`).join("")+'</div>'
+    : '<div style="color:#2bb673;font-weight:600">✅ 未发现数据质量问题</div>';
+  box.innerHTML=html; box.classList.remove("hide");
+  const b=document.getElementById("healthBadge");
+  if(d.issues.length){ b.classList.remove("hide"); b.textContent=d.issues.length; } else { b.classList.add("hide"); }
+}
 
 window.addEventListener("DOMContentLoaded", boot);
 </script>

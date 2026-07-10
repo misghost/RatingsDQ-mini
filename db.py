@@ -16,7 +16,7 @@ db.py — 评级到期提醒后端 存储层（SQLite，单文件）
 import sqlite3
 import os
 import json
-from datetime import datetime
+from datetime import datetime, date
 
 def _db_path():
     """DB 路径动态读取，便于云托管挂载 CFS 卷（如 /data/rating.db）。"""
@@ -204,6 +204,7 @@ def init_db():
         ON notifications_sent(openid, rating_id, notify_day, channel);
     """)
     _migrate_users(conn)
+    _migrate_admin_source(conn)
     conn.commit()
     conn.close()
 
@@ -373,6 +374,10 @@ def get_all_admin():
             "issuance_source": r["issuance_source"],
             "project_type": r["project_type"],
             "debt_type": r["debt_type"],
+            "rating": r["rating"] or "",
+            "outlook": r["outlook"] or "",
+            "notes": r["notes"] or "",
+            "deleted_at": r["deleted_at"],
         })
     return out
 
@@ -382,6 +387,227 @@ def admin_count():
     n = conn.execute("SELECT COUNT(*) AS n FROM admin_source").fetchone()["n"]
     conn.close()
     return n
+
+
+def _migrate_admin_source(conn):
+    """报告数据表扩展：评级等级 / 展望 / 备注 / 软删除标记。"""
+    _add_col(conn, "admin_source", "rating", "TEXT")
+    _add_col(conn, "admin_source", "outlook", "TEXT")
+    _add_col(conn, "admin_source", "notes", "TEXT")
+    _add_col(conn, "admin_source", "deleted_at", "TEXT")
+    # 计算结果的评级等级 / 展望，随报告数据带入，便于前端展示
+    _add_col(conn, "final_ratings", "rating", "TEXT")
+    _add_col(conn, "final_ratings", "outlook", "TEXT")
+
+
+# ---------------------------------------------------------------------------
+# admin_source CRUD（管理员维护报告数据）/ 回收站 / 数据体检
+# ---------------------------------------------------------------------------
+def _row_to_report(r):
+    # 日期统一返回 ISO 字符串（避免 Flask 把 date 序列化为 RFC822 长串，前端 <input type=date> 无法识别）
+    li = _parse_iso(r["li_date"])
+    iss = _parse_iso(r["issuance"])
+    return {
+        "id": r["id"],
+        "subject": r["subject"] or "",
+        "contract_no": r["contract_no"] or "",
+        "li_date": li.isoformat() if li else "",
+        "issuance": iss.isoformat() if iss else "",
+        "issuance_source": r["issuance_source"],
+        "project_type": r["project_type"] or "",
+        "debt_type": r["debt_type"] or "",
+        "rating": r["rating"] or "",
+        "outlook": r["outlook"] or "",
+        "notes": r["notes"] or "",
+        "deleted_at": r["deleted_at"],
+    }
+
+
+def add_admin_rating(rec):
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute(
+        """INSERT INTO admin_source
+           (subject, contract_no, li_date, issuance, issuance_source,
+            project_type, debt_type, rating, outlook, notes)
+           VALUES(?,?,?,?,?,?,?,?,?,?)""",
+        (rec.get("subject"), rec.get("contract_no", ""),
+         rec.get("li_date"), rec.get("issuance"), rec.get("issuance_source"),
+         rec.get("project_type", ""), rec.get("debt_type", ""),
+         rec.get("rating", ""), rec.get("outlook", ""), rec.get("notes", "")))
+    rid = c.lastrowid
+    conn.commit()
+    conn.close()
+    return rid
+
+
+def update_admin_rating(rid, fields):
+    allowed = {"subject", "contract_no", "li_date", "issuance",
+               "issuance_source", "project_type", "debt_type",
+               "rating", "outlook", "notes"}
+    sets, vals = [], []
+    for k, v in fields.items():
+        if k in allowed:
+            sets.append(f"{k}=?")
+            vals.append(v)
+    if not sets:
+        return False
+    vals.append(rid)
+    conn = get_conn()
+    conn.execute(
+        f"UPDATE admin_source SET {', '.join(sets)} WHERE id=?", vals)
+    conn.commit()
+    conn.close()
+    return True
+
+
+def soft_delete_admin_rating(rid):
+    conn = get_conn()
+    conn.execute(
+        "UPDATE admin_source SET deleted_at=datetime('now') WHERE id=?", (rid,))
+    conn.commit()
+    conn.close()
+
+
+def restore_admin_rating(rid):
+    conn = get_conn()
+    conn.execute(
+        "UPDATE admin_source SET deleted_at=NULL WHERE id=?", (rid,))
+    conn.commit()
+    conn.close()
+
+
+def get_admin_rating(rid, include_deleted=False):
+    conn = get_conn()
+    if include_deleted:
+        r = conn.execute("SELECT * FROM admin_source WHERE id=?", (rid,)).fetchone()
+    else:
+        r = conn.execute(
+            "SELECT * FROM admin_source WHERE id=? AND deleted_at IS NULL",
+            (rid,)).fetchone()
+    conn.close()
+    return _row_to_report(r) if r else None
+
+
+def list_admin_ratings(q=None, sort=None, order="asc",
+                       page=1, page_size=50, include_deleted=False):
+    conn = get_conn()
+    where, params = [], []
+    if not include_deleted:
+        where.append("deleted_at IS NULL")
+    if q:
+        where.append("(subject LIKE ? OR contract_no LIKE ? OR notes LIKE ?)")
+        like = f"%{q}%"
+        params += [like, like, like]
+    sql_where = ("WHERE " + " AND ".join(where)) if where else ""
+    sort_whitelist = {"id", "subject", "contract_no", "li_date",
+                      "issuance", "project_type", "debt_type", "rating",
+                      "outlook", "deleted_at"}
+    sort_col = sort if sort in sort_whitelist else "id"
+    order_dir = "DESC" if order == "desc" else "ASC"
+    total = conn.execute(
+        f"SELECT COUNT(*) AS n FROM admin_source {sql_where}", params
+    ).fetchone()["n"]
+    rows = conn.execute(
+        f"SELECT * FROM admin_source {sql_where} ORDER BY {sort_col} {order_dir} "
+        f"LIMIT ? OFFSET ?",
+        params + [page_size, (page - 1) * page_size]).fetchall()
+    conn.close()
+    return {"total": total, "page": page, "page_size": page_size,
+            "items": [_row_to_report(r) for r in rows]}
+
+
+def list_trashed():
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM admin_source WHERE deleted_at IS NOT NULL "
+        "ORDER BY deleted_at DESC").fetchall()
+    conn.close()
+    return [_row_to_report(r) for r in rows]
+
+
+def batch_soft_delete(ids):
+    if not ids:
+        return 0
+    conn = get_conn()
+    qm = ",".join("?" * len(ids))
+    conn.execute(
+        f"UPDATE admin_source SET deleted_at=datetime('now') "
+        f"WHERE id IN ({qm})", ids)
+    n = conn.total_changes
+    conn.commit()
+    conn.close()
+    return n
+
+
+def batch_restore(ids):
+    if not ids:
+        return 0
+    conn = get_conn()
+    qm = ",".join("?" * len(ids))
+    conn.execute(
+        f"UPDATE admin_source SET deleted_at=NULL WHERE id IN ({qm})", ids)
+    conn.commit()
+    conn.close()
+    return len(ids)
+
+
+def find_duplicate_report(subject, contract_no, issuance, exclude_id=None):
+    """智能去重：相同 (主体, 合同号, 出具日) 的其它有效记录。"""
+    conn = get_conn()
+    sql = ("SELECT id FROM admin_source WHERE subject=? AND contract_no=? "
+           "AND issuance=? AND deleted_at IS NULL")
+    params = [subject, contract_no, issuance]
+    if exclude_id:
+        sql += " AND id<>?"
+        params.append(exclude_id)
+    r = conn.execute(sql, params).fetchone()
+    conn.close()
+    return r["id"] if r else None
+
+
+def admin_source_health():
+    """数据体检：健康分 + 问题清单（基于报告数据字段质量）。"""
+    conn = get_conn()
+    rows = conn.execute(
+        "SELECT * FROM admin_source WHERE deleted_at IS NULL").fetchall()
+    conn.close()
+    issues, seen = [], {}
+    today = date.today().isoformat()
+    for r in rows:
+        rid = r["id"]
+        subj = r["subject"] or ""
+        if not subj:
+            issues.append(_issue("high", "主体", rid, "", "主体(机构名称)缺失"))
+        if not r["issuance"]:
+            issues.append(_issue("high", "出具日", rid, subj,
+                                 "出具时间缺失，无法计算到期"))
+        elif r["issuance"] > today:
+            issues.append(_issue("mid", "出具日", rid, subj,
+                                 "出具时间在未来，疑似录入错误"))
+        if not r["contract_no"]:
+            issues.append(_issue("low", "合同号", rid, subj,
+                                 "合同号缺失（可能影响归属）"))
+        key = (subj, r["contract_no"] or "", r["issuance"] or "")
+        if key in seen:
+            issues.append(_issue("mid", "重复", rid, subj,
+                                 f"与记录 #{seen[key]} 主体/合同号/出具日完全相同"))
+        else:
+            seen[key] = rid
+    total = len(rows)
+    bad = len(issues)
+    score = max(0, 100 - bad * 5) if total else 100
+    counts = {"high": 0, "mid": 0, "low": 0}
+    for it in issues:
+        counts[it["level"]] += 1
+    return {"total": total, "issues": issues, "score": score,
+            "counts": counts}
+
+
+def _issue(level, field, rid, subject, msg):
+    return {"level": level, "field": field, "id": rid,
+            "subject": subject, "msg": msg}
+
 
 
 # ---------------------------------------------------------------------------
@@ -484,13 +710,14 @@ def replace_final_ratings(rows):
             """INSERT INTO final_ratings
                (openid, subject, contract_no, base_date, expiry_date,
                 remind_date, status, debt_type, project_type, attribution,
-                source, extra_json)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,?)""",
+                source, extra_json, rating, outlook)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (r["openid"], r["subject"], r.get("contract_no", ""),
              r["base_date"], r["expiry_date"], r["remind_date"], r["status"],
              r.get("debt_type", ""), r.get("project_type", ""),
              r.get("attribution", ""), r.get("source", ""),
-             json.dumps(r.get("extra", {}), ensure_ascii=False)))
+             json.dumps(r.get("extra", {}), ensure_ascii=False),
+             r.get("rating"), r.get("outlook")))
     conn.commit()
     n = conn.execute("SELECT COUNT(*) AS n FROM final_ratings").fetchone()["n"]
     conn.close()
