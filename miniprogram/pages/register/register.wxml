@@ -8,8 +8,9 @@
     <view class="card">
       <view class="field">
         <text class="lbl">所属机构</text>
-        <input placeholder="如：XX证券股份有限公司" data-f="organization"
+        <input placeholder="如：浙江分公司（填所在分支机构，勿填外部机构）" data-f="organization"
                value="{{organization}}" bindinput="onInput" />
+        <text class="hint">请填写您所在的分支机构，例如：浙江分公司、北京分公司，不要写外部券商名称。</text>
       </view>
       <view class="field">
         <text class="lbl">姓名</text>

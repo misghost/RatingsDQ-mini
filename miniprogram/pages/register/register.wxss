@@ -1,6 +1,6 @@
-.reg-wrap { padding: 100rpx 48rpx 60rpx; }
-.logo { font-size: 48rpx; font-weight: 600; text-align: center; }
-.sub { color: #9aa0a6; text-align: center; margin-top: 16rpx; font-size: 26rpx; }
+.reg-wrap { padding: 90rpx 48rpx 60rpx; }
+.logo { font-size: 48rpx; font-weight: 600; text-align: center; color: #0f1b33; }
+.sub { color: #7a8499; text-align: center; margin-top: 16rpx; font-size: 26rpx; }
 
 .err-banner {
   margin-top: 30rpx; padding: 16rpx 24rpx;
@@ -10,21 +10,23 @@
 .err-banner text { font-size: 24rpx; color: #e65100; line-height: 1.5; }
 
 .field { margin-top: 24rpx; }
-.field .lbl { display: block; font-size: 26rpx; color: #9aa0a6; margin-bottom: 10rpx; }
+.field .lbl { display: block; font-size: 26rpx; color: #7a8499; margin-bottom: 10rpx; font-weight: 600; }
 .field input {
   width: 100%; padding: 20rpx 24rpx;
-  background: #fafbfc; border: 1rpx solid #e6e8eb; border-radius: 12rpx;
-  font-size: 28rpx;
+  background: #fbfcfe; border: 2rpx solid #e5e9f2; border-radius: 12rpx;
+  font-size: 28rpx; color: #2b3245;
 }
+.field .hint { display: block; margin-top: 10rpx; font-size: 22rpx; color: #aab1c2; line-height: 1.5; }
 
 .reg-btn {
   margin-top: 60rpx; border-radius: 48rpx;
   font-size: 32rpx; height: 88rpx; line-height: 88rpx;
+  box-shadow: 0 12rpx 28rpx -10rpx rgba(39,75,214,.55);
 }
 .skip-row { margin-top: 40rpx; text-align: center; }
-.skip-text { font-size: 28rpx; color: #9aa0a6; }
+.skip-text { font-size: 28rpx; color: #7a8499; }
 
 .result { margin-top: 40rpx; text-align: center; padding: 60rpx 40rpx; }
 .res-icon { font-size: 90rpx; }
-.res-title { font-size: 34rpx; font-weight: 600; margin-top: 16rpx; }
-.res-msg { font-size: 26rpx; color: #9aa0a6; margin-top: 12rpx; line-height: 1.6; }
+.res-title { font-size: 34rpx; font-weight: 600; margin-top: 16rpx; color: #0f1b33; }
+.res-msg { font-size: 26rpx; color: #7a8499; margin-top: 12rpx; line-height: 1.6; }
