@@ -70,5 +70,5 @@
 .sec-title { font-size: 30rpx; font-weight: 600; color: #0f1b33; }
 .sec-sub { font-size: 24rpx; color: #94a3b8; margin-top: 8rpx; }
 .sec-arrow { font-size: 44rpx; color: #c4c9d2; }
-.logout-card { margin-top: 24rpx; }
+.logout-card { margin-top: 24rpx; display: flex; align-items: center; justify-content: space-between; }
 .logout-text { font-size: 30rpx; font-weight: 600; color: #e5484d; }

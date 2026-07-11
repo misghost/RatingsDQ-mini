@@ -83,11 +83,16 @@
       <text class="sec-arrow">›</text>
     </view>
 
-    <view class="card logout-card" bindtap="logout">
+    <view class="card sec-card" bindtap="bindWechat">
       <view class="sec-left">
-        <text class="logout-text">退出账号</text>
-        <text class="sec-sub">退出后可更换其他账号登录，或用于解除卡顿</text>
+        <text class="sec-title">{{wxBound ? '微信已绑定' : '绑定微信'}}</text>
+        <text class="sec-sub">{{wxBound ? '已开启微信快捷登录' : '绑定后可用微信一键登录'}}</text>
       </view>
+      <text class="sec-arrow">›</text>
+    </view>
+
+    <view class="card logout-card" bindtap="logout">
+      <text class="logout-text">退出账号</text>
       <text class="sec-arrow">›</text>
     </view>
   </block>

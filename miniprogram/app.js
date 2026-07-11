@@ -3,7 +3,8 @@ const { get } = require('./utils/request');
 App({
   globalData: {
     openid: '',
-    role: ''
+    role: '',
+    wxBound: false
   },
   onLaunch() {
     const openid = wx.getStorageSync('openid');
@@ -11,6 +12,7 @@ App({
     if (openid) {
       this.globalData.openid = openid;
       this.globalData.role = role;
+      this.globalData.wxBound = wx.getStorageSync('wxBound') === true;
     }
   },
   // 拉取未读消息数并刷新 tabBar 红点（消息中心为第 5 个 tab，index=4）

@@ -113,8 +113,14 @@ def _migrate_users(conn):
     _add_col(conn, "users", "reject_reason", "TEXT")
     # 软删除标记（NULL/空=未删，有值=删除时间）
     _add_col(conn, "users", "deleted_at", "TEXT")
+    # 是否已绑定微信（1=可用微信快捷登录）。web 注册账号默认 0，微信注册账号默认 1
+    _add_col(conn, "users", "wx_bound", "INTEGER", "0")
     # 旧数据（status 为 NULL）统一视为已审核通过，避免存量用户被锁死
     conn.execute("UPDATE users SET status='approved' WHERE status IS NULL OR status=''")
+    # 存量用户回填：微信注册的账号（openid 非 web_ 前缀、非 admin）视为已绑定微信
+    conn.execute(
+        "UPDATE users SET wx_bound=1 WHERE openid NOT LIKE 'web_%' AND openid<>'admin' "
+        "AND (wx_bound IS NULL OR wx_bound=0)")
     # 通知偏好表
     conn.execute("""
     CREATE TABLE IF NOT EXISTS user_notif(
@@ -290,11 +296,12 @@ def register_user(openid, organization, name, phone, email=None, role="user", pa
     conn = get_conn()
     c = conn.cursor()
     existing = c.execute("SELECT * FROM users WHERE openid=?", (openid,)).fetchone()
+    wx_bound = 0 if openid.startswith("web_") else 1  # 微信注册即视为已绑定
     if existing:
         c.execute(
-            """UPDATE users SET organization=?, marketer_name=?, phone=?, email=?, role=?
+            """UPDATE users SET organization=?, marketer_name=?, phone=?, email=?, role=?, wx_bound=?
                WHERE openid=?""",
-            (organization, name, phone, email, role, openid))
+            (organization, name, phone, email, role, wx_bound, openid))
         if pw_hash and not existing["password_hash"]:
             c.execute("UPDATE users SET password_hash=? WHERE openid=?",
                       (pw_hash, openid))
@@ -302,9 +309,9 @@ def register_user(openid, organization, name, phone, email=None, role="user", pa
             c.execute("UPDATE users SET status='pending' WHERE openid=?", (openid,))
     else:
         c.execute(
-            """INSERT INTO users(openid, role, marketer_name, organization, phone, email, password_hash, status)
-               VALUES(?,?,?,?,?,?,?,'pending')""",
-            (openid, role, name, organization, phone, email, pw_hash))
+            """INSERT INTO users(openid, role, marketer_name, organization, phone, email, password_hash, wx_bound, status)
+               VALUES(?,?,?,?,?,?,?,?,'pending')""",
+            (openid, role, name, organization, phone, email, pw_hash, wx_bound))
     conn.commit()
     conn.close()
 
@@ -486,6 +493,8 @@ def bind_wechat_openid(phone, new_openid):
     c.execute("UPDATE user_notif SET openid=? WHERE openid=?", (new_openid, old_openid))
     c.execute("UPDATE final_ratings SET openid=? WHERE openid=? AND attribution='matched'",
               (new_openid, old_openid))
+    # 绑定成功后标记已绑定微信（开启微信快捷登录）
+    c.execute("UPDATE users SET wx_bound=1 WHERE openid=?", (new_openid,))
     conn.commit()
     # 取新行返回
     updated = c.execute("SELECT * FROM users WHERE openid=?", (new_openid,)).fetchone()

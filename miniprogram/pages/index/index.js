@@ -26,6 +26,7 @@ Page({
   data: {
     loggedIn: false,
     ready: false,
+    wxBound: false,
     filters: FILTERS,
     sorts: SORTS,
     active: 'all',
@@ -46,7 +47,7 @@ Page({
       return;
     }
     wx.showTabBar();
-    this.setData({ loggedIn: true });
+    this.setData({ loggedIn: true, wxBound: wx.getStorageSync('wxBound') === true });
     getApp().applyRoleTab();
     if (openid) {
       getApp().refreshUnread();
@@ -65,6 +66,55 @@ Page({
   goMessages() { wx.switchTab({ url: '/pages/messages/messages' }); },
   goChangePw() { wx.navigateTo({ url: '/pages/profile/profile' }); },
 
+  // 绑定微信：已登录（手机号+密码）用户，将当前账号关联到微信，开启微信快捷登录
+  bindWechat() {
+    if (this.data.wxBound) {
+      wx.showToast({ title: '您已绑定微信，可直接用微信快捷登录', icon: 'none' });
+      return;
+    }
+    wx.showModal({
+      title: '绑定微信',
+      content: '绑定后下次可用「微信快捷登录」一键进入，无需再输密码。确定绑定当前微信吗？',
+      confirmText: '绑定',
+      success: (res) => {
+        if (!res.confirm) return;
+        wx.showLoading({ title: '绑定中...' });
+        wx.login({
+          success: (r) => {
+            if (!r.code) {
+              wx.hideLoading();
+              wx.showToast({ title: '获取微信凭证失败', icon: 'none' });
+              return;
+            }
+            post('/api/bind-wechat', { code: r.code })
+              .then((d) => {
+                wx.hideLoading();
+                // 绑定成功：账号 openid 已变为微信 openid，需同步本地登录态
+                wx.setStorageSync('openid', d.openid);
+                wx.setStorageSync('role', d.role || 'user');
+                wx.setStorageSync('wxBound', true);
+                const app = getApp();
+                app.globalData.openid = d.openid;
+                app.globalData.role = d.role || 'user';
+                app.globalData.wxBound = true;
+                wx.showToast({ title: '微信绑定成功', icon: 'success' });
+                setTimeout(() => { wx.reLaunch({ url: '/pages/index/index' }); }, 1000);
+              })
+              .catch((err) => {
+                wx.hideLoading();
+                const msg = (err && err.error) || '绑定失败，请稍后重试';
+                wx.showToast({ title: msg, icon: 'none', duration: 2500 });
+              });
+          },
+          fail: () => {
+            wx.hideLoading();
+            wx.showToast({ title: '微信调用失败，请重试', icon: 'none' });
+          }
+        });
+      }
+    });
+  },
+
   // 退出账号：清空本地登录态并跳回登录页（可切换账号 / 解除卡顿）
   logout() {
     wx.showModal({
@@ -76,9 +126,11 @@ Page({
         if (!res.confirm) return;
         wx.removeStorageSync('openid');
         wx.removeStorageSync('role');
+        wx.removeStorageSync('wxBound');
         const app = getApp();
         app.globalData.openid = '';
         app.globalData.role = '';
+        app.globalData.wxBound = false;
         try { wx.removeTabBarBadge({ index: 4 }); } catch (e) {}
         wx.showToast({ title: '已退出', icon: 'success' });
         setTimeout(() => {

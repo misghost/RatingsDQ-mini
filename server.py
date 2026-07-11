@@ -171,6 +171,7 @@ def _issue_session(openid, u):
         "role": u["role"],
         "name": u.get("marketer_name"),
         "status": u["status"],
+        "wx_bound": bool(u.get("wx_bound")),
         "admin_password_required": bool(ADMIN_PASSWORD),
         "token": openid
     })
@@ -245,6 +246,45 @@ def bind_account():
         "token": new_openid
     }
     return jsonify(result)
+
+
+@app.route("/api/bind-wechat", methods=["POST"])
+def bind_wechat():
+    """已登录账号（手机号+密码登录的用户）绑定微信，开启微信快捷登录。
+
+    流程：
+      1. 客户端以当前会话 openid 鉴权（?openid=...）
+      2. 调 wx.login 拿到 code，连同当前用户身份提交
+      3. 服务端派生微信 openid，按手机号把该账号的 openid 更新为微信 openid
+      4. 返回新的 openid（客户端据此更新本地登录态，之后即可用微信快捷登录）
+    """
+    oid, err, code_ = _user_gate(current_openid())
+    if err:
+        return err, code_
+    body = request.get_json(silent=True) or {}
+    code = (body.get("code") or "").strip()
+    if not code:
+        return jsonify({"error": "缺少微信登录凭证"}), 400
+    new_openid = _openid_from_code(code, "user")
+    if not new_openid:
+        return jsonify({"error": "微信凭证解析失败"}), 502
+    u = db.get_user(oid)
+    phone = (u.get("phone") or "").strip()
+    if not phone:
+        return jsonify({"error": "当前账号未登记手机号，无法绑定微信"}), 400
+    ok, u2, msg = db.bind_wechat_openid(phone, new_openid)
+    if not ok:
+        return jsonify({"error": msg}), 409
+    db.log_audit(new_openid, "bind_wechat",
+                 detail=f"previous_oid={oid[:12]} phone={phone[:3]}***")
+    return jsonify({
+        "openid": new_openid,
+        "role": u2.get("role", "user"),
+        "name": u2.get("marketer_name"),
+        "wx_bound": True,
+        "bound": True,
+        "message": msg
+    })
 
 
 @app.route("/api/web/login", methods=["POST"])

@@ -52,8 +52,10 @@ Page({
       .then((d) => {
         wx.setStorageSync('openid', d.openid);
         wx.setStorageSync('role', d.role);
+        wx.setStorageSync('wxBound', !!d.wx_bound);
         getApp().globalData.openid = d.openid;
         getApp().globalData.role = d.role;
+        getApp().globalData.wxBound = !!d.wx_bound;
         wx.showTabBar();
         wx.reLaunch({ url: '/pages/index/index' });
       })
@@ -99,8 +101,10 @@ Page({
           .then((d) => {
             wx.setStorageSync('openid', d.openid);
             wx.setStorageSync('role', d.role);
+            wx.setStorageSync('wxBound', !!d.wx_bound);
             getApp().globalData.openid = d.openid;
             getApp().globalData.role = d.role;
+            getApp().globalData.wxBound = !!d.wx_bound;
             wx.showTabBar();
             wx.reLaunch({ url: '/pages/index/index' });
           })
@@ -200,8 +204,10 @@ Page({
           if (d.status === 'approved') {
             wx.setStorageSync('openid', d.openid);
             wx.setStorageSync('role', d.role || 'user');
+            wx.setStorageSync('wxBound', true);
             getApp().globalData.openid = d.openid;
             getApp().globalData.role = d.role || 'user';
+            getApp().globalData.wxBound = true;
             wx.showToast({ title: '关联成功', icon: 'success' });
             setTimeout(() => {
               wx.showTabBar();
