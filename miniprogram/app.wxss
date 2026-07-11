@@ -98,8 +98,10 @@ view, text, button, input, scroll-view { box-sizing: border-box; }
 /* ---------- 按钮 ---------- */
 button::after { border: none; }
 .btn {
-  height: 84rpx; line-height: 84rpx; border-radius: 999rpx;
-  font-size: 30rpx; font-weight: 600; text-align: center; padding: 0;
+  height: 88rpx; border-radius: 999rpx;
+  font-size: 30rpx; font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0;
 }
 .btn-primary { background: #2f6bff; color: #fff; }
 .btn-primary[disabled] { background: #b9c7e8; color: #fff; }

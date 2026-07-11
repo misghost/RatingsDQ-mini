@@ -19,30 +19,35 @@
   box-shadow: 0 4rpx 24rpx rgba(15,27,51,0.06);
 }
 
-.field { margin-top: 36rpx; }
+.field { margin-top: 40rpx; }
 .field:first-child { margin-top: 0; }
 .field .lbl {
-  display: block; font-size: 28rpx; color: #4a5568;
-  margin-bottom: 16rpx; font-weight: 600; letter-spacing: 1rpx;
+  display: block; font-size: 29rpx; color: #4a5568;
+  margin-bottom: 18rpx; font-weight: 600; letter-spacing: 1rpx;
 }
+/* 注册输入框：高度从 92rpx 加到 108rpx，字号加大 */
 .field input {
-  width: 100%; height: 92rpx; padding: 0 30rpx;
-  background: #f8fafc; border: 2rpx solid #e2e8f0; border-radius: 16rpx;
-  font-size: 30rpx; color: #1a202c;
-  transition: border-color 0.2s;
+  width: 100%; height: 108rpx; padding: 0 32rpx;
+  background: #f8fafc; border: 2rpx solid #e2e8f0; border-radius: 18rpx;
+  font-size: 32rpx; color: #1a202c;
+  box-sizing: border-box;
 }
 .field input:focus {
   border-color: #2f6bff; background: #ffffff;
 }
 .field .hint {
-  display: block; margin-top: 14rpx;
-  font-size: 24rpx; color: #94a3b8; line-height: 1.7; padding: 0 4rpx;
+  display: block; margin-top: 16rpx;
+  font-size: 25rpx; color: #94a3b8; line-height: 1.7; padding: 0 4rpx;
 }
 
+/* 注册按钮：flex 真居中 */
 .reg-btn {
   margin-top: 70rpx; border-radius: 50rpx;
   font-size: 33rpx; font-weight: 600;
-  height: 96rpx; line-height: 96rpx;
+  height: 100rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   letter-spacing: 4rpx;
   box-shadow: 0 16rpx 36rpx -10rpx rgba(39,75,214,.5);
 }
