@@ -456,50 +456,77 @@ def find_user_by_phone_or_name(phone, name):
 
 
 def bind_wechat_openid(phone, new_openid):
-    """将已有账号（通过手机号定位）绑定到新的微信 openid。
+    """将手机号对应的账号绑定/迁移到真实微信 openid（code2Session 返回的 o 开头 openid）。
 
-    场景：用户先通过注册页创建了账号（当时用某个 code 派生了一个旧 openid），
-    之后微信登录拿到新 code → 新 openid 在 users 表里不存在。
-    此函数把该用户的 openid 更新为当前微信 openid，使其能正常登录。
+    兼容历史脏数据：同一手机号可能在库里存在多条记录（mock 时期的微信 openid、
+    web_ 手机号 openid、已删除的重复项等）。此函数把所有同手机号记录的数据
+    （user_notif / final_ratings）合并到 new_openid，删除重复记录，保留 new_openid
+    为唯一账号（wx_bound=1、继承密码哈希与角色），避免数据丢失或迁移错对象。
 
     返回 (ok, user_dict | None, error_msg)。
     """
     conn = get_conn()
     c = conn.cursor()
-    u = c.execute("SELECT * FROM users WHERE phone=?", (phone,)).fetchone()
-    if not u:
+    rows = c.execute("SELECT * FROM users WHERE phone=?", (phone,)).fetchall()
+    if not rows:
         conn.close()
         return False, None, "未找到使用该手机号的注册账号"
-    old_openid = u["openid"]
-    if old_openid == new_openid:
-        conn.close()
-        return True, dict(u), "已绑定"
-    # 检查新 openid 是否已被别人占用
-    existing = c.execute("SELECT * FROM users WHERE openid=?", (new_openid,)).fetchone()
-    if existing:
+    new_exists = c.execute("SELECT * FROM users WHERE openid=?", (new_openid,)).fetchone()
+    if new_exists and (new_exists["phone"] or "") != phone:
         conn.close()
         return False, None, "该微信已关联其他账号"
-    # 执行绑定：先删旧行（openid 是主键，SQLite 不支持 UPDATE 主键值）
-    c.execute("DELETE FROM users WHERE openid=?", (old_openid,))
-    # 构建新行（openid 替换为新值）
-    new_row = dict(u)
-    new_row["openid"] = new_openid
-    # 再插新行
-    cols = ",".join(new_row.keys())
-    placeholders = ",".join(["?"] * len(new_row))
-    c.execute(f"INSERT INTO users({cols}) VALUES({placeholders})",
-              list(new_row.values()))
-    # 同步更新依赖 openid 的子表：user_notif / final_ratings(如有归属)
-    c.execute("UPDATE user_notif SET openid=? WHERE openid=?", (new_openid, old_openid))
-    c.execute("UPDATE final_ratings SET openid=? WHERE openid=? AND attribution='matched'",
-              (new_openid, old_openid))
-    # 绑定成功后标记已绑定微信（开启微信快捷登录）
-    c.execute("UPDATE users SET wx_bound=1 WHERE openid=?", (new_openid,))
+    old_openids = [r["openid"] for r in rows if r["openid"] != new_openid]
+    if not old_openids and new_exists:
+        c.execute("UPDATE users SET wx_bound=1 WHERE openid=?", (new_openid,))
+        conn.commit()
+        updated = c.execute("SELECT * FROM users WHERE openid=?", (new_openid,)).fetchone()
+        conn.close()
+        return True, dict(updated), "已绑定"
+    # 主记录：取评级数据最多的那条，用于继承姓名/角色/状态
+    def _rc(oid):
+        return c.execute("SELECT count(*) FROM final_ratings WHERE openid=?",
+                         (oid,)).fetchone()[0]
+    primary = max(rows, key=lambda r: _rc(r["openid"]))
+    # 状态取最优（已审核优先于待审/已删），避免绑定后账号被误锁
+    best_status = "approved"
+    for r in rows:
+        if r["status"] == "approved":
+            best_status = "approved"
+            break
+        elif r["status"] == "pending" and best_status not in ("approved",):
+            best_status = "pending"
+    # 继承密码哈希：优先主记录，否则同组任一条非空
+    pw = (primary["password_hash"] or "")
+    if not pw:
+        for r in rows:
+            if r["password_hash"]:
+                pw = r["password_hash"]
+                break
+    # 把所有旧 openid 的子表数据迁到 new_openid
+    for oid in old_openids:
+        c.execute("UPDATE user_notif SET openid=? WHERE openid=?", (new_openid, oid))
+        c.execute("UPDATE final_ratings SET openid=? WHERE openid=?", (new_openid, oid))
+        c.execute("DELETE FROM users WHERE openid=?", (oid,))
+    if new_exists:
+        c.execute(
+            """UPDATE users SET phone=?, marketer_name=?, role=?, status=?,
+                   password_hash=?, wx_bound=1 WHERE openid=?""",
+            (primary["phone"], primary["marketer_name"], primary["role"],
+             best_status, pw, new_openid))
+    else:
+        new_row = dict(primary)
+        new_row["openid"] = new_openid
+        new_row["wx_bound"] = 1
+        new_row["password_hash"] = pw
+        new_row["status"] = best_status
+        cols = ",".join(new_row.keys())
+        placeholders = ",".join(["?"] * len(new_row))
+        c.execute(f"INSERT INTO users({cols}) VALUES({placeholders})",
+                  list(new_row.values()))
     conn.commit()
-    # 取新行返回
     updated = c.execute("SELECT * FROM users WHERE openid=?", (new_openid,)).fetchone()
     conn.close()
-    return True, dict(updated), f"绑定成功（原账号 {old_openid[:8]}… 已迁移）"
+    return True, dict(updated), f"绑定成功（已合并 {len(old_openids)} 个账号，数据已迁移）"
 
 
 def get_admin_openids():

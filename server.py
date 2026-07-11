@@ -820,12 +820,25 @@ def _wx_access_token():
     return None
 
 
+def _fmt_wx_date(iso):
+    """把 ISO 日期(如 2027-05-19)转成微信 time 字段接受的中文格式：2027年05月19日。"""
+    if not iso:
+        return ""
+    try:
+        d = datetime.strptime(iso[:10], "%Y-%m-%d")
+        return d.strftime("%Y年%m月%d日")
+    except Exception:
+        return iso
+
+
 def _send_subscribe(openid, ratings):
     """微信订阅消息发送（一次性订阅，需用户此前已授权）。"""
     token = _wx_access_token()
     if not token or not WX_TEMPLATE_ID:
         return False
-    default_map = {"thing1": "{subject}", "time2": "{expiry}", "thing3": "{count}条评级待关注"}
+    # 默认字段映射（与「定时维护提醒」模板一致：客户名称/提醒时间/提醒内容）。
+    # 可通过环境变量 WX_TEMPLATE_DATA(JSON) 覆盖。
+    default_map = {"name1": "{subject}", "time3": "{expiry}", "thing4": "合同到期"}
     fmap = default_map
     if WX_TEMPLATE_DATA:
         try:
@@ -834,7 +847,8 @@ def _send_subscribe(openid, ratings):
             fmap = default_map
     top = ratings[0] if ratings else {}
     subj = (top.get("subject") or "")[:20]
-    expiry = top.get("expiry_date") or ""
+    raw_expiry = top.get("expiry_date") or ""
+    expiry = _fmt_wx_date(raw_expiry)
     count = len(ratings)
     data = {k: {"value": str(v).format(subject=subj, expiry=expiry, count=count)}
             for k, v in fmap.items()}
