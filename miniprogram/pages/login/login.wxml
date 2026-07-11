@@ -40,12 +40,18 @@
   <block wx:if="{{showBind}}">
     <view class="card bind-card">
       <view class="bind-title">关联已有账号</view>
-      <view class="bind-desc">输入你注册时使用的手机号，即可将账号与当前微信关联</view>
+      <view class="bind-desc">输入注册时使用的「手机号 + 登录密码」，即可将账号与当前微信关联</view>
 
       <view class="field">
         <text class="lbl">手机号</text>
         <input type="number" maxlength="11" placeholder="注册时填写的手机号"
                value="{{bindPhone}}" bindinput="onBindPhone" />
+      </view>
+
+      <view class="field">
+        <text class="lbl">密码</text>
+        <input type="text" password placeholder="账号登录密码"
+               value="{{bindPassword}}" bindinput="onBindPassword" />
       </view>
 
       <button class="btn-primary bind-btn" loading="{{binding}}" bindtap="doBind">

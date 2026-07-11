@@ -8,6 +8,7 @@ Page({
     showBind: false,
     showBindHint: false,
     bindPhone: '',
+    bindPassword: '',
     binding: false
   },
 
@@ -80,7 +81,7 @@ Page({
 
   /* ---- 绑定已有账号 ---- */
   openBind() {
-    this.setData({ showBind: true, errMsg: '', bindPhone: '' });
+    this.setData({ showBind: true, errMsg: '', bindPhone: '', bindPassword: '' });
   },
 
   closeBind() {
@@ -91,14 +92,23 @@ Page({
     this.setData({ bindPhone: e.detail.value });
   },
 
+  onBindPassword(e) {
+    this.setData({ bindPassword: e.detail.value });
+  },
+
   doBind() {
     const phone = this.data.bindPhone.replace(/\s/g, '');
+    const password = this.data.bindPassword || '';
     if (!phone) {
       wx.showToast({ title: '请输入手机号', icon: 'none' });
       return;
     }
     if (!/^1[3-9]\d{9}$/.test(phone)) {
       wx.showToast({ title: '手机号格式不正确', icon: 'none' });
+      return;
+    }
+    if (!password) {
+      wx.showToast({ title: '请输入登录密码', icon: 'none' });
       return;
     }
     const lastCode = this.data._lastCode;
@@ -126,8 +136,9 @@ Page({
   },
 
   _callBind(code, phone) {
+    const password = this.data.bindPassword || '';
     this.setData({ binding: true });
-    post('/api/bind-account', { phone, code })
+    post('/api/bind-account', { phone, code, password })
       .then((d) => {
         if (d.bound) {
           // 绑定成功 → 检查状态
@@ -154,7 +165,18 @@ Page({
         this.setData({ binding: false });
       })
       .catch((err) => {
-        const msg = (err && err.error) || '关联失败，请稍后重试';
+        const code_ = (err && err.code) || '';
+        let msg = (err && err.error) || '关联失败，请稍后重试';
+        if (code_ === 'NEED_PASSWORD_SET') {
+          // 账号尚未设置密码：需管理员在后台设置初始密码后，用户用「手机号+密码」重新关联
+          wx.showModal({
+            title: '需先设置密码',
+            content: '该账号尚未设置登录密码，无法关联。请先在网页后台（管理员 → 用户管理 → 重置密码）设置初始密码，再回来用「手机号 + 密码」关联微信。',
+            showCancel: false
+          });
+          this.setData({ binding: false });
+          return;
+        }
         wx.showToast({ title: msg, icon: 'none', duration: 3000 });
         this.setData({ binding: false });
       });
