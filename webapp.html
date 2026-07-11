@@ -233,19 +233,20 @@
   .pager button:hover:not(:disabled){background:#e9edf3}
   .pager button:disabled{opacity:.45;cursor:not-allowed}
 
-  /* 日历热力 */
-  .cal{display:grid;gap:20px}
-  .cal-block{background:#fafbfe;border:1px solid var(--line);border-radius:14px;padding:14px}
-  .cal-month{font-size:13px;font-weight:600;color:var(--ink);margin-bottom:10px}
-  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
-  .cal-grid .dow{font-size:10.5px;color:var(--grey);text-align:center;padding-bottom:2px}
-  .cal-cell{aspect-ratio:1/1;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--sub);background:#f4f6fa;border:1px solid var(--line)}
+  /* 日历热力（紧凑横排 + 默认收起） */
+  .cal{display:flex;flex-wrap:wrap;gap:12px}
+  .cal-block{flex:1 1 210px;min-width:190px;background:#fafbfe;border:1px solid var(--line);border-radius:14px;padding:12px}
+  .cal-month{font-size:12.5px;font-weight:600;color:var(--ink);margin-bottom:8px}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .cal-grid .dow{font-size:9.5px;color:var(--grey);text-align:center;padding-bottom:2px}
+  .cal-cell{aspect-ratio:1/1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:10px;color:var(--sub);background:#f4f6fa;border:1px solid var(--line)}
   .cal-cell.has{font-weight:600;color:var(--ink)}
   .cal-cell.lv1{background:#eaf3ff;border-color:#cfe0ff}
   .cal-cell.lv2{background:#bcd6ff;border-color:#9cc0ff}
   .cal-cell.lv3{background:#ffd9c2;border-color:#ffbf9e}
   .cal-cell.lv4{background:#ff9d7a;border-color:#ff7e57;color:#fff}
   .cal-cell.empty{visibility:hidden}
+  .cal-summary{font-size:12px;font-weight:500;color:var(--primary);margin-left:8px}
 
   /* 预警阈值 chips + 续期 */
   .day-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
@@ -453,10 +454,10 @@
 
   <div class="card">
     <div class="toolbar">
-      <h2 style="margin:0">到期日历分布 <span class="badge">热力</span></h2>
-      <button class="link" onclick="renderCalendar()">加载日历</button>
+      <h2 style="margin:0">到期日历分布 <span class="badge">热力</span><span id="calSummary" class="cal-summary"></span></h2>
+      <button class="link" onclick="toggleCalendar()" id="calToggle">展开日历</button>
     </div>
-    <div class="cal" id="calBox"><div class="empty">点击「加载日历」查看未来 6 个月到期分布</div></div>
+    <div class="cal" id="calBox" style="display:none"><div class="empty">点击「展开日历」查看未来 3 个月到期分布</div></div>
   </div>
 
   <div class="card">
@@ -1379,14 +1380,23 @@ function printMy(){
 }
 
 /* ---------- 日历热力 ---------- */
+let _calLoaded=false, _calOpen=false;
+async function toggleCalendar(){
+  _calOpen=!_calOpen;
+  const box=document.getElementById("calBox");
+  const btn=document.getElementById("calToggle");
+  box.style.display=_calOpen?"flex":"none";
+  btn.textContent=_calOpen?"收起":"展开日历";
+  if(_calOpen && !_calLoaded){ await renderCalendar(); _calLoaded=true; }
+}
 async function renderCalendar(){
   const box=document.getElementById("calBox");
   box.innerHTML='<div class="empty">加载中…</div>';
-  const r=await api("/api/my/calendar?months=6");
+  const r=await api("/api/my/calendar?months=3");
   if(r.status!==200){ box.innerHTML=`<div class="empty">${r.body.error||"加载失败"}</div>`; return; }
   const data=r.body.days||{};
   const dows=["日","一","二","三","四","五","六"];
-  let html="";
+  let total=0, html="";
   const start=new Date(r.body.start+"T00:00:00");
   const end=new Date(r.body.end+"T00:00:00");
   let cur=new Date(start.getFullYear(),start.getMonth(),1);
@@ -1403,6 +1413,7 @@ async function renderCalendar(){
       let cls="cal-cell", txt=dd;
       if(v){
         const tot=(v.overdue||0)+(v.due||0)+(v.upcoming||0);
+        total+=tot;
         if(tot>0){ cls+=" has"; const up=v.upcoming||0, due=v.due||0, od=v.overdue||0;
           const lvl = od>0?4 : (due>=3?3 : (due>0||up>0?2:1));
           cls+=" lv"+lvl; }
@@ -1413,6 +1424,8 @@ async function renderCalendar(){
     cur=new Date(y,m+1,1);
   }
   box.innerHTML=html;
+  const s=document.getElementById("calSummary");
+  if(s) s.textContent = total>0 ? `· 未来 3 个月共 ${total} 条到期` : "· 未来 3 个月无到期";
 }
 
 /* ---------- 管理员审计 ---------- */
