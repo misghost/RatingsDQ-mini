@@ -1,9 +1,18 @@
 .login-wrap { padding: 120rpx 48rpx 60rpx; }
 .logo { font-size: 48rpx; font-weight: 600; text-align: center; }
 .sub { color: #9aa0a6; text-align: center; margin-top: 16rpx; font-size: 26rpx; }
-.role-card { margin-top: 60rpx; }
-.role-row { display: flex; justify-content: space-between; align-items: center; }
-.sm { font-size: 24rpx; margin-top: 12rpx; }
+
+.sec-title { font-size: 30rpx; font-weight: 600; color: #0f1b33; margin-bottom: 28rpx; }
+.field { margin-top: 28rpx; }
+.lbl {
+  display: block; font-size: 28rpx; color: #7a8499;
+  margin-bottom: 16rpx; font-weight: 600;
+}
+.field input {
+  width: 100%; height: 100rpx; padding: 0 30rpx;
+  background: #fbfcfe; border: 2rpx solid #e5e9f2; border-radius: 16rpx;
+  font-size: 32rpx; color: #2b3245; box-sizing: border-box;
+}
 
 /* 按钮：flex 真居中，不用 line-height 猜 */
 .login-btn {
@@ -15,6 +24,22 @@
   align-items: center;
   justify-content: center;
 }
+
+/* 微信快捷登录：次要按钮（浅绿描边） */
+.wx-btn {
+  margin-top: 48rpx;
+  border-radius: 48rpx;
+  font-size: 30rpx;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e8f8ef;
+  color: #07c160;
+  border: 2rpx solid #b6e8c9;
+}
+.wx-ico { margin-right: 12rpx; font-size: 34rpx; }
+.wx-tip { text-align: center; font-size: 23rpx; color: #9aa0a6; margin-top: 16rpx; }
 
 .err-banner {
   margin-top: 30rpx; padding: 16rpx 24rpx;

@@ -3,40 +3,44 @@
   <view class="sub">登录后可查看个人专属到期提醒、上传合同数据</view>
 
   <!-- 错误提示 -->
-  <view wx:if="{{errMsg && !showBind}}" class="err-banner">
+  <view wx:if="{{errMsg}}" class="err-banner">
     <text>{{errMsg}}</text>
   </view>
 
-  <!-- 管理员切换 -->
-  <view class="card role-card">
-    <view class="role-row">
-      <text>以管理员身份登录</text>
-      <switch checked="{{isAdmin}}" bindchange="toggleRole" color="#07c160" />
-    </view>
-    <view class="muted sm">管理员可上传后台源数据、查看全员总览</view>
-  </view>
+  <!-- 主登录：手机号 + 密码 -->
+  <view class="card login-card">
+    <view class="sec-title">手机号登录</view>
 
-  <!-- 主登录按钮（未显示绑定面板时） -->
-  <block wx:if="{{!showBind}}">
-    <button class="btn-primary login-btn" loading="{{loading}}" bindtap="doLogin">
-      {{isAdmin ? '管理员登录' : '微信登录'}}
-    </button>
-
-    <view class="skip-row" bindtap="skipLogin">
-      <text class="skip-text">暂不登录，先浏览</text>
+    <view class="field">
+      <text class="lbl">手机号</text>
+      <input type="number" maxlength="11" placeholder="请输入注册手机号"
+             value="{{phone}}" bindinput="onPhone" />
     </view>
+
+    <view class="field">
+      <text class="lbl">密码</text>
+      <input type="text" password placeholder="请输入登录密码"
+             value="{{password}}" bindinput="onPassword" />
+    </view>
+
+    <button class="btn-primary login-btn" loading="{{loading}}" bindtap="doPasswordLogin">登录</button>
 
     <view class="skip-row" bindtap="goRegister">
       <text class="skip-text">还没有账号？去注册 ›</text>
     </view>
+  </view>
 
-    <!-- 已有账号但微信登不上？绑定入口 -->
-    <view wx:if="{{showBindHint}}" class="bind-hint" bindtap="openBind">
-      <text class="bind-hint-text">已有注册账号？点此关联微信登录</text>
-    </view>
-  </block>
+  <!-- 微信快捷登录（次要） -->
+  <button class="wx-btn" loading="{{wxLoading}}" bindtap="doWechatLogin">
+    <text class="wx-ico">💬</text> 微信快捷登录
+  </button>
+  <view class="wx-tip">已关联的微信可一键登录，免输密码</view>
 
-  <!-- 绑定已有账号面板 -->
+  <view class="skip-row" bindtap="skipLogin">
+    <text class="skip-text">暂不登录，先浏览</text>
+  </view>
+
+  <!-- 绑定已有账号面板（微信未关联时） -->
   <block wx:if="{{showBind}}">
     <view class="card bind-card">
       <view class="bind-title">关联已有账号</view>
