@@ -113,7 +113,7 @@ def _openid_from_code(code, role="user"):
 def _user_gate(oid):
     """统一审核状态门禁：返回 (oid, None, None) 或 (None, err_json, code)。"""
     if not oid:
-        return None, jsonify({"error": "missing X-Openid header"}), 401
+        return None, jsonify({"error": "missing openid"}), 401
     u = db.get_user(oid)
     if not u:
         return None, jsonify({"error": "请先注册账号后再登录",
@@ -1429,7 +1429,7 @@ def admin_overview():
 def _auth_admin():
     oid = current_openid()
     if not oid:
-        return None, jsonify({"error": "missing X-Openid"}), 401
+        return None, jsonify({"error": "missing openid"}), 401
     u = db.get_user(oid)
     if not u:
         return None, jsonify({"error": "unknown user"}), 403
