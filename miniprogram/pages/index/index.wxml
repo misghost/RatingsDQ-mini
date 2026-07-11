@@ -82,5 +82,13 @@
       </view>
       <text class="sec-arrow">›</text>
     </view>
+
+    <view class="card logout-card" bindtap="logout">
+      <view class="sec-left">
+        <text class="logout-text">退出账号</text>
+        <text class="sec-sub">退出后可更换其他账号登录，或用于解除卡顿</text>
+      </view>
+      <text class="sec-arrow">›</text>
+    </view>
   </block>
 </block>

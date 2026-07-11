@@ -65,6 +65,29 @@ Page({
   goMessages() { wx.switchTab({ url: '/pages/messages/messages' }); },
   goChangePw() { wx.navigateTo({ url: '/pages/profile/profile' }); },
 
+  // 退出账号：清空本地登录态并跳回登录页（可切换账号 / 解除卡顿）
+  logout() {
+    wx.showModal({
+      title: '退出账号',
+      content: '退出后需重新登录才能查看您的专属数据。确定退出当前账号吗？',
+      confirmText: '退出',
+      confirmColor: '#e5484d',
+      success: (res) => {
+        if (!res.confirm) return;
+        wx.removeStorageSync('openid');
+        wx.removeStorageSync('role');
+        const app = getApp();
+        app.globalData.openid = '';
+        app.globalData.role = '';
+        try { wx.removeTabBarBadge({ index: 4 }); } catch (e) {}
+        wx.showToast({ title: '已退出', icon: 'success' });
+        setTimeout(() => {
+          wx.reLaunch({ url: '/pages/login/login' });
+        }, 800);
+      }
+    });
+  },
+
   switchFilter(e) { this.setData({ active: e.currentTarget.dataset.key }); this.applyFilter(); },
   setSort(e) { this.setData({ sort: e.currentTarget.dataset.key }); if (this.data.loggedIn) this.load(); else this.applyFilter(); },
   onSearch(e) { this.setData({ search: e.detail.value }); if (this.data.loggedIn) this.load(); else this.applyFilter(); },
