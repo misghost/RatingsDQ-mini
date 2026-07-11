@@ -11,7 +11,14 @@ Page({
 
   onShow() {
     const openid = wx.getStorageSync('openid');
-    this.setData({ loggedIn: !!openid });
+    if (!openid) {
+      wx.hideTabBar();
+      this.setData({ loggedIn: false });
+      wx.hideTabBarRedDot({ index: 4 }); // 确保无红点
+      return;
+    }
+    wx.showTabBar();
+    this.setData({ loggedIn: true });
     if (openid) this.load();
     else wx.hideTabBarRedDot({ index: 4 });
   },

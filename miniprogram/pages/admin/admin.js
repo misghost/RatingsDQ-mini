@@ -16,8 +16,13 @@ Page({
   onShow() {
     const openid = wx.getStorageSync('openid');
     const role = wx.getStorageSync('role') || 'user';
-    this.setData({ role: role, loggedIn: !!openid });
-    if (!openid) return;           // 未登录：显示提示，不跳转
+    if (!openid) {
+      wx.hideTabBar();
+      this.setData({ role, loggedIn: false });
+      return;
+    }
+    wx.showTabBar();
+    this.setData({ role, loggedIn: true });
     if (role !== 'admin') return;   // 非管理员：显示无权限
     this.loadOverview();
     this.loadReview();

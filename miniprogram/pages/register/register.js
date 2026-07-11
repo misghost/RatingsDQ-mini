@@ -11,6 +11,14 @@ Page({
     errMsg: ''
   },
 
+  onLoad() {
+    wx.hideTabBar();
+  },
+
+  onShow() {
+    wx.hideTabBar();
+  },
+
   onInput(e) {
     const f = e.currentTarget.dataset.f;
     this.setData({ [f]: e.detail.value });

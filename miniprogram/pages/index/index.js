@@ -39,7 +39,14 @@ Page({
 
   onShow() {
     const openid = wx.getStorageSync('openid');
-    this.setData({ loggedIn: !!openid });
+    if (!openid) {
+      wx.hideTabBar();
+      this.setData({ loggedIn: false });
+      this.loadDemo();
+      return;
+    }
+    wx.showTabBar();
+    this.setData({ loggedIn: true });
     if (openid) {
       getApp().refreshUnread();
       this.load();

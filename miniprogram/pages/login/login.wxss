@@ -19,3 +19,36 @@
 .err-banner text { font-size: 24rpx; color: #e65100; line-height: 1.5; }
 .skip-row { margin-top: 40rpx; text-align: center; }
 .skip-text { font-size: 28rpx; color: #9aa0a6; }
+
+/* 绑定提示入口 */
+.bind-hint {
+  margin-top: 50rpx; padding: 24rpx 32rpx;
+  background: #f0f5ff; border-radius: 16rpx;
+  border: 2rpx solid #c4d5fc; text-align: center;
+}
+.bind-hint-text { font-size: 27rpx; color: #274bd6; font-weight: 500; }
+
+/* 绑定面板 */
+.bind-card {
+  margin-top: 40rpx; padding: 48rpx 36rpx;
+}
+.bind-title { font-size: 34rpx; font-weight: 600; color: #0f1b33; text-align: center; }
+.bind-desc {
+  font-size: 25rpx; color: #7a8499; text-align: center;
+  margin-top: 16rpx; line-height: 1.6;
+}
+.bind-card .field { margin-top: 32rpx; }
+.bind-card .lbl {
+  display: block; font-size: 27rpx; color: #7a8499;
+  margin-bottom: 14rpx; font-weight: 600;
+}
+.bind-card input {
+  width: 100%; padding: 26rpx 28rpx;
+  background: #fbfcfe; border: 2rpx solid #e5e9f2; border-radius: 14rpx;
+  font-size: 30rpx; color: #2b3245;
+}
+.bind-btn {
+  margin-top: 56rpx; border-radius: 48rpx;
+  font-size: 32rpx; height: 88rpx; line-height: 88rpx;
+  box-shadow: 0 12rpx 28rpx -10rpx rgba(39,75,214,.55);
+}

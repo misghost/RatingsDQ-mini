@@ -326,6 +326,51 @@ def find_user_by_phone_or_name(phone, name):
     return dict(u) if u else None
 
 
+def bind_wechat_openid(phone, new_openid):
+    """将已有账号（通过手机号定位）绑定到新的微信 openid。
+
+    场景：用户先通过注册页创建了账号（当时用某个 code 派生了一个旧 openid），
+    之后微信登录拿到新 code → 新 openid 在 users 表里不存在。
+    此函数把该用户的 openid 更新为当前微信 openid，使其能正常登录。
+
+    返回 (ok, user_dict | None, error_msg)。
+    """
+    conn = get_conn()
+    c = conn.cursor()
+    u = c.execute("SELECT * FROM users WHERE phone=?", (phone,)).fetchone()
+    if not u:
+        conn.close()
+        return False, None, "未找到使用该手机号的注册账号"
+    old_openid = u["openid"]
+    if old_openid == new_openid:
+        conn.close()
+        return True, dict(u), "已绑定"
+    # 检查新 openid 是否已被别人占用
+    existing = c.execute("SELECT * FROM users WHERE openid=?", (new_openid,)).fetchone()
+    if existing:
+        conn.close()
+        return False, None, "该微信已关联其他账号"
+    # 执行绑定：先删旧行（openid 是主键，SQLite 不支持 UPDATE 主键值）
+    c.execute("DELETE FROM users WHERE openid=?", (old_openid,))
+    # 构建新行（openid 替换为新值）
+    new_row = dict(u)
+    new_row["openid"] = new_openid
+    # 再插新行
+    cols = ",".join(new_row.keys())
+    placeholders = ",".join(["?"] * len(new_row))
+    c.execute(f"INSERT INTO users({cols}) VALUES({placeholders})",
+              list(new_row.values()))
+    # 同步更新依赖 openid 的子表：user_notif / final_ratings(如有归属)
+    c.execute("UPDATE user_notif SET openid=? WHERE openid=?", (new_openid, old_openid))
+    c.execute("UPDATE final_ratings SET openid=? WHERE openid=? AND attribution='matched'",
+              (new_openid, old_openid))
+    conn.commit()
+    # 取新行返回
+    updated = c.execute("SELECT * FROM users WHERE openid=?", (new_openid,)).fetchone()
+    conn.close()
+    return True, dict(updated), f"绑定成功（原账号 {old_openid[:8]}… 已迁移）"
+
+
 def get_admin_openids():
     conn = get_conn()
     rows = conn.execute("SELECT openid FROM users WHERE role='admin'").fetchall()

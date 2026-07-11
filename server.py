@@ -176,6 +176,66 @@ def _issue_session(openid, u):
     })
 
 
+@app.route("/api/bind-account", methods=["POST"])
+def bind_account():
+    """将已有注册账号（通过手机号定位）绑定到当前微信 openid。
+
+    前端在登录遇到 NOT_REGISTERED 时引导用户走此接口：
+      1. 用户输入注册时用的手机号
+      2. 后端用 wx.login 的 code 派生新 openid
+      3. 将该手机号对应账号的 openid 更新为新 openid
+      4. 返回登录会话（等效于直接登录成功）
+    """
+    body = request.get_json(silent=True) or {}
+    phone = (body.get("phone") or "").strip()
+    code = (body.get("code") or "").strip()
+    if not phone:
+        return jsonify({"error": "请输入注册时使用的手机号"}), 400
+    if not code:
+        return jsonify({"error": "缺少微信登录凭证"}), 400
+    if not re.match(r"^1[3-9]\d{9}$", phone):
+        return jsonify({"error": "手机号格式不正确"}), 400
+
+    new_openid = _openid_from_code(code, "user")
+    if not new_openid:
+        return jsonify({"error": "微信凭证解析失败"}), 502
+
+    ok, u, msg = db.bind_wechat_openid(phone, new_openid)
+    if not ok:
+        return jsonify({"error": msg}), 404
+
+    # 绑定成功后检查审核状态
+    oid2, err, code_ = _user_gate(new_openid)
+    if err:
+        # 绑定成功了但账号还没通过审核，返回带状态的信息
+        return jsonify({
+            "openid": new_openid,
+            "role": u.get("role", "user"),
+            "name": u.get("marketer_name"),
+            "status": u.get("status", "pending"),
+            "bound": True,
+            "message": msg + f"，但账号状态：{u.get('status', 'unknown')}"
+        }), 200
+
+    db.log_audit(new_openid, "bind_account",
+                 detail=f"phone={phone}, previous_oid={u.get('openid','?')[:12]}")
+    resp = _issue_session(new_openid, u)
+    resp.get_json(lambda: None)  # noqa — 延迟求值，下面直接改 dict
+    d = dict(resp[0].get_data(as_text=True)) if hasattr(resp[0], 'get_data') else {}
+    # 简单方式：重新构造
+    result = {
+        "openid": new_openid,
+        "role": u.get("role", "user"),
+        "name": u.get("marketer_name"),
+        "status": u.get("status", "approved"),
+        "bound": True,
+        "message": msg,
+        "admin_password_required": bool(ADMIN_PASSWORD),
+        "token": new_openid
+    }
+    return jsonify(result)
+
+
 @app.route("/api/web/login", methods=["POST"])
 def web_login():
     """

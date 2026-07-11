@@ -14,9 +14,15 @@ Page({
 
   onShow() {
     const openid = wx.getStorageSync('openid');
+    if (!openid) {
+      wx.hideTabBar();
+      this.setData({ role: 'user', loggedIn: false });
+      return;
+    }
+    wx.showTabBar();
     this.setData({
       role: wx.getStorageSync('role') || 'user',
-      loggedIn: !!openid
+      loggedIn: true
     });
   },
 
