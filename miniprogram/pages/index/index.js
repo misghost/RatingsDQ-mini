@@ -47,6 +47,7 @@ Page({
     }
     wx.showTabBar();
     this.setData({ loggedIn: true });
+    getApp().applyRoleTab();
     if (openid) {
       getApp().refreshUnread();
       this.load();

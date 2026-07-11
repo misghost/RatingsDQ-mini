@@ -21,6 +21,7 @@ Page({
       return;
     }
     wx.showTabBar();
+    getApp().applyRoleTab();
     this.setData({ loggedIn: true });
     if (openid) this.load();
   },
@@ -29,7 +30,7 @@ Page({
     get('/api/my/notification')
       .then((d) => {
         const ch = d.channels || [];
-        const nd = (Array.isArray(d.notify_days) && d.notify_days.length) ? d.notify_days : this.data.notifyDays;
+        const nd = (Array.isArray(d.notify_days) && d.notify_days.length) ? d.notify_days.map(Number) : this.data.notifyDays;
         this.setData({
           channels: {
             miniprogram: ch.indexOf('miniprogram') >= 0,
@@ -56,6 +57,14 @@ Page({
     const f = e.currentTarget.dataset.f;
     this.setData({ ['channels.' + f]: !this.data.channels[f] });
   },
+
+  // 点击开关本身：由 bindchange 直接同步状态（catchtap 阻止冒泡，避免与 row 的 toggle 双击抵消）
+  onSwitch(e) {
+    const f = e.currentTarget.dataset.f;
+    this.setData({ ['channels.' + f]: !!e.detail.value });
+  },
+
+  noop() {},
 
   onEmail(e) {
     this.setData({ email: e.detail.value });

@@ -71,7 +71,7 @@
       <view class="row"><text class="k">提醒日</text><text class="v">{{item.remind}}</text></view>
       <view class="row" wx:if="{{item.left !== null}}"><text class="k">剩余</text><text class="v" style="color:{{item.statusColor}}">{{item.left >= 0 ? item.left + ' 天' : '已超 ' + (-item.left) + ' 天'}}</text></view>
       <view style="margin-top:16rpx;" wx:if="{{!item.renewed}}">
-        <button class="btn btn-grey btn-block" style="height:64rpx;line-height:64rpx;font-size:26rpx;border-radius:999rpx;" data-id="{{item.id}}" bindtap="renew">标记已续期 / 已重评</button>
+        <button class="btn btn-grey btn-block" style="height:64rpx;font-size:26rpx;border-radius:999rpx;" data-id="{{item.id}}" bindtap="renew">标记已续期 / 已重评</button>
       </view>
     </view>
 

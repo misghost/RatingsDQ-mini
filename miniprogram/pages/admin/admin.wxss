@@ -10,9 +10,10 @@
 .nl-title { font-size: 32rpx; font-weight: 600; color: #1f2329; margin-bottom: 12rpx; }
 .nl-desc { font-size: 26rpx; color: #9aa0a6; margin-bottom: 40rpx; text-align: center; }
 .btn-go-login {
-  width: 400rpx; height: 80rpx; line-height: 80rpx;
+  width: 400rpx; height: 80rpx; line-height: normal;
   border-radius: 48rpx; font-size: 30rpx;
   background: #07c160; color: #fff;
+  display: flex; align-items: center; justify-content: center;
 }
 
 .ov-card { background: #fff; border-radius: 16rpx; padding: 24rpx; }
@@ -52,11 +53,13 @@
 .p-row { display: flex; justify-content: space-between; font-size: 26rpx; padding: 6rpx 0; }
 .p-actions { display: flex; gap: 20rpx; margin-top: 16rpx; }
 .btn-approve {
-  flex: 1; height: 72rpx; line-height: 72rpx; font-size: 28rpx;
+  flex: 1; height: 72rpx; line-height: normal; font-size: 28rpx;
   border-radius: 40rpx; background: #07c160; color: #fff;
+  display: flex; align-items: center; justify-content: center;
 }
 .btn-reject {
-  flex: 1; height: 72rpx; line-height: 72rpx; font-size: 28rpx;
+  flex: 1; height: 72rpx; line-height: normal; font-size: 28rpx;
   border-radius: 40rpx; background: #fff; color: #e54d42;
   border: 1rpx solid #e54d42;
+  display: flex; align-items: center; justify-content: center;
 }

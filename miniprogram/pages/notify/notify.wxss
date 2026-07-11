@@ -31,16 +31,19 @@
 
 .btn-primary {
   margin-top: 40rpx; border-radius: 48rpx; font-size: 32rpx;
-  height: 84rpx; line-height: 84rpx; background: #07c160; color: #fff;
+  height: 84rpx; line-height: normal; background: #07c160; color: #fff;
+  display: flex; align-items: center; justify-content: center;
 }
 .btn-ghost {
   margin-top: 20rpx; border-radius: 48rpx; font-size: 28rpx;
-  height: 76rpx; line-height: 76rpx; background: #fff; color: #07c160;
+  height: 76rpx; line-height: normal; background: #fff; color: #07c160;
   border: 1rpx solid #07c160;
+  display: flex; align-items: center; justify-content: center;
 }
 .btn-grey {
   margin-top: 20rpx; border-radius: 48rpx; font-size: 28rpx;
-  height: 76rpx; line-height: 76rpx; background: #eef0f2; color: #1f2329;
+  height: 76rpx; line-height: normal; background: #eef0f2; color: #1f2329;
+  display: flex; align-items: center; justify-content: center;
 }
 
 .sub-state { font-size: 26rpx; color: #07c160; margin: 16rpx 0; }

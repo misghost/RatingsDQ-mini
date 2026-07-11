@@ -101,6 +101,7 @@ button::after { border: none; }
   height: 88rpx; border-radius: 999rpx;
   font-size: 30rpx; font-weight: 600;
   display: flex; align-items: center; justify-content: center;
+  line-height: normal;
   padding: 0;
 }
 .btn-primary { background: #2f6bff; color: #fff; }

@@ -18,6 +18,7 @@ Page({
       return;
     }
     wx.showTabBar();
+    getApp().applyRoleTab();
     this.setData({ loggedIn: true });
     if (openid) this.load();
     else wx.hideTabBarRedDot({ index: 4 });

@@ -24,5 +24,13 @@ App({
         else wx.removeTabBarBadge({ index: 4 });
       })
       .catch(() => {});
+  },
+  // 按角色显示/隐藏「管理总览」tab（tabBar 第 4 个，index=3）：仅管理员可见
+  applyRoleTab() {
+    const role = wx.getStorageSync('role') || 'user';
+    try {
+      if (role === 'admin') wx.showTabBarItem({ index: 3 });
+      else wx.hideTabBarItem({ index: 3 });
+    } catch (e) {}
   }
 });

@@ -22,6 +22,7 @@ Page({
       return;
     }
     wx.showTabBar();
+    getApp().applyRoleTab();
     this.setData({ role, loggedIn: true });
     if (role !== 'admin') return;   // 非管理员：显示无权限
     this.loadOverview();

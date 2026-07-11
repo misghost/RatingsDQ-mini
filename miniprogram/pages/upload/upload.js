@@ -21,6 +21,7 @@ Page({
       return;
     }
     wx.showTabBar();
+    getApp().applyRoleTab();
     this.setData({
       role: wx.getStorageSync('role') || 'user',
       loggedIn: true

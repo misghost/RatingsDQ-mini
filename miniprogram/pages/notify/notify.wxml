@@ -17,7 +17,7 @@
           <text class="d">通过微信订阅消息推送（需在本小程序内授权）</text>
         </view>
         <switch checked="{{channels.miniprogram}}" color="#07c160"
-                bindtap="toggle" data-f="miniprogram" />
+                catchtap="noop" bindchange="onSwitch" data-f="miniprogram" />
       </view>
 
       <view class="row" bindtap="toggle" data-f="email">
@@ -26,7 +26,7 @@
           <text class="d">发送至下方邮箱地址</text>
         </view>
         <switch checked="{{channels.email}}" color="#07c160"
-                bindtap="toggle" data-f="email" />
+                catchtap="noop" bindchange="onSwitch" data-f="email" />
       </view>
 
       <view class="field" wx:if="{{channels.email}}">
