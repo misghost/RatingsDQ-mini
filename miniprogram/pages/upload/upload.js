@@ -9,7 +9,8 @@ Page({
     pendingType: '',
     pendingPath: '',
     msg: '',
-    resultText: ''
+    resultText: '',
+    guideExpanded: true
   },
 
   onShow() {
@@ -92,5 +93,9 @@ Page({
     const name = this.data.marketers[e.detail.value];
     this.setData({ marketAs: name, msg: '以「' + name + '」身份重新上传…' });
     this.doUpload(this.data.pendingType, this.data.pendingPath);
+  },
+
+  toggleGuide() {
+    this.setData({ guideExpanded: !this.data.guideExpanded });
   }
 });

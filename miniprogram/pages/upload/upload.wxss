@@ -29,6 +29,69 @@
 
 .tip { font-size: 22rpx; color: #9aa0a6; margin-top: 8rpx; }
 
+/* 操作指引 */
+.guide {
+  background: #f8fafc;
+  border: 1rpx solid #e2e8f0;
+  border-radius: 16rpx;
+  margin-bottom: 20rpx;
+  overflow: hidden;
+}
+.guide-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20rpx 24rpx;
+}
+.guide-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1f2329;
+}
+.guide-arrow {
+  font-size: 24rpx;
+  color: #07c160;
+  font-weight: 500;
+}
+.guide-body {
+  padding: 0 24rpx 20rpx;
+}
+.step {
+  display: flex;
+  align-items: flex-start;
+  padding: 14rpx 0;
+}
+.step-num {
+  width: 44rpx;
+  height: 44rpx;
+  line-height: 44rpx;
+  text-align: center;
+  border-radius: 50%;
+  background: #07c160;
+  color: #fff;
+  font-size: 24rpx;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-right: 18rpx;
+}
+.step-text {
+  flex: 1;
+  padding-top: 4rpx;
+}
+.step-t {
+  display: block;
+  font-size: 27rpx;
+  font-weight: 600;
+  color: #1f2329;
+  margin-bottom: 4rpx;
+}
+.step-d {
+  display: block;
+  font-size: 23rpx;
+  color: #6b7280;
+  line-height: 1.5;
+}
+
 .picker {
   background: #f5f6f8;
   padding: 24rpx;

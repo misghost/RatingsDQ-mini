@@ -11,6 +11,38 @@
   <block wx:if="{{loggedIn}}">
   <view wx:if="{{role !== 'admin'}}" class="section">
     <view class="sec-title">市场人员 · 上传你的数据</view>
+
+    <!-- 操作指引 -->
+    <view class="guide">
+      <view class="guide-hd" bindtap="toggleGuide">
+        <text class="guide-title">📋 上传操作指引</text>
+        <text class="guide-arrow">{{guideExpanded ? '收起' : '展开'}}</text>
+      </view>
+      <view wx:if="{{guideExpanded}}" class="guide-body">
+        <view class="step">
+          <view class="step-num">①</view>
+          <view class="step-text">
+            <text class="step-t">导出合同管理</text>
+            <text class="step-d">登录东方金信评级系统 → 批量导出 → 选择「合同管理」→ 下载</text>
+          </view>
+        </view>
+        <view class="step">
+          <view class="step-num">②</view>
+          <view class="step-text">
+            <text class="step-t">不要修改文件</text>
+            <text class="step-d">得到「合同管理.xlsx」后，不要修改任何内容，直接选择上传</text>
+          </view>
+        </view>
+        <view class="step">
+          <view class="step-num">③</view>
+          <view class="step-text">
+            <text class="step-t">本系统上传</text>
+            <text class="step-d">点击下方「选择文件」→ 选中合同管理.xlsx → 上传即可</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
     <button class="up-btn" data-type="contract" bindtap="chooseAndUpload">上传 合同管理.xlsx（精准归属）</button>
     <button class="up-btn ghost" data-type="chenlan" bindtap="chooseAndUpload">上传 承揽立项.xlsx（兜底）</button>
     <button class="up-btn ghost" data-type="zuoye" bindtap="chooseAndUpload">上传 项目作业.xlsx（兜底）</button>
