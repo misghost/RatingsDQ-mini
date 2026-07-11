@@ -405,18 +405,21 @@ def admin_list_users():
     oid, err, code_ = _auth_admin()
     if err:
         return err, code_
-    status = request.args.get("status")
-    users = db.list_users(status=status)
-    return jsonify({
-        "pending_count": db.count_pending(),
-        "users": [{
-            "openid": u["openid"], "role": u["role"],
-            "name": u.get("marketer_name"), "organization": u.get("organization"),
-            "phone": u.get("phone"), "email": u.get("email"),
-            "status": u["status"], "created_at": u.get("created_at"),
-            "reject_reason": u.get("reject_reason")
-        } for u in users]
-    })
+    scope = request.args.get("scope")  # all | deleted
+    if scope == "deleted":
+        rows = [u for u in db.list_users(include_deleted=True)
+                if u.get("deleted_at")]
+    else:
+        rows = db.list_users()
+    users = [{
+        "openid": u["openid"], "role": u["role"],
+        "name": u.get("marketer_name"), "organization": u.get("organization"),
+        "phone": u.get("phone"), "email": u.get("email"),
+        "status": u["status"], "created_at": u.get("created_at"),
+        "deleted_at": u.get("deleted_at"),
+        "reject_reason": u.get("reject_reason")
+    } for u in rows]
+    return jsonify({"pending_count": db.count_pending(), "users": users})
 
 
 @app.route("/api/admin/users/review", methods=["POST"])
@@ -437,6 +440,114 @@ def admin_review_user():
     db.set_user_status(target, new_status, reviewed_by=oid, reason=reason)
     db.log_audit(oid, "review:" + action, target=target, detail=reason)
     return jsonify({"ok": True, "openid": target, "status": new_status})
+
+
+# ---------------------------------------------------------------------------
+# 用户管理：修改 / 停用 / 启用 / 删除(软) / 恢复
+# ---------------------------------------------------------------------------
+def _guard_target(oid, target, allow_self=False, allow_admin=False):
+    """统一校验：返回 (target_user, error_json, code)。
+
+    - 不可操作自己（除非 allow_self）
+    - 管理员账号不可被删除/停用（除非 allow_admin）
+    """
+    if not target:
+        return None, jsonify({"error": "缺少目标 openid"}), 400
+    if not allow_self and target == oid:
+        return None, jsonify({"error": "不能对自己执行此操作"}), 400
+    u = db.get_user(target)
+    if not u:
+        return None, jsonify({"error": "用户不存在"}), 404
+    if not allow_admin and u["role"] == "admin":
+        return None, jsonify({"error": "管理员账号不可被停用或删除"}), 400
+    return u, None, None
+
+
+@app.route("/api/admin/users/<openid>", methods=["PUT"])
+def admin_update_user(openid):
+    """修改用户资料（姓名/机构/手机/邮箱/角色）。"""
+    oid, err, code_ = _auth_admin()
+    if err:
+        return err, code_
+    if not openid:
+        return jsonify({"error": "缺少目标 openid"}), 400
+    body = request.get_json(silent=True) or {}
+    u = db.get_user(openid)
+    if not u:
+        return jsonify({"error": "用户不存在"}), 404
+    # 自保护：不能取消自己的管理员权限
+    new_role = (body.get("role") or "").strip()
+    if new_role and new_role != "admin" and u["role"] == "admin" and openid == oid:
+        return jsonify({"error": "不能取消自己的管理员权限"}), 400
+    ok, emsg = db.update_user(
+        openid,
+        marketer_name=(body.get("name") or "").strip() or None,
+        organization=(body.get("organization") or "").strip() or None,
+        phone=(body.get("phone") or "").strip(),
+        email=(body.get("email") or "").strip() or None,
+        role=new_role or None)
+    if not ok:
+        return jsonify({"error": emsg}), 400
+    db.log_audit(oid, "update_user", target=openid,
+                 detail=f"name={body.get('name')};org={body.get('organization')};"
+                        f"phone={body.get('phone')};email={body.get('email')};role={new_role}")
+    return jsonify({"ok": True, "message": "已更新用户资料"})
+
+
+@app.route("/api/admin/users/<openid>/disable", methods=["POST"])
+def admin_disable_user(openid):
+    """停用用户（status -> disabled）。"""
+    oid, err, code_ = _auth_admin()
+    if err:
+        return err, code_
+    u, e, c = _guard_target(oid, openid, allow_self=False, allow_admin=False)
+    if e:
+        return e, c
+    db.set_user_status(openid, "disabled", reviewed_by=oid, reason="管理员停用")
+    db.log_audit(oid, "disable_user", target=openid, detail=u.get("marketer_name"))
+    return jsonify({"ok": True, "openid": openid, "status": "disabled"})
+
+
+@app.route("/api/admin/users/<openid>/enable", methods=["POST"])
+def admin_enable_user(openid):
+    """启用用户（status -> approved）。"""
+    oid, err, code_ = _auth_admin()
+    if err:
+        return err, code_
+    u = db.get_user(openid)
+    if not u:
+        return jsonify({"error": "用户不存在"}), 404
+    db.set_user_status(openid, "approved", reviewed_by=oid)
+    db.log_audit(oid, "enable_user", target=openid, detail=u.get("marketer_name"))
+    return jsonify({"ok": True, "openid": openid, "status": "approved"})
+
+
+@app.route("/api/admin/users/<openid>", methods=["DELETE"])
+def admin_delete_user(openid):
+    """软删除用户（标记 deleted_at，保留数据与关联记录便于恢复）。"""
+    oid, err, code_ = _auth_admin()
+    if err:
+        return err, code_
+    u, e, c = _guard_target(oid, openid, allow_self=False, allow_admin=False)
+    if e:
+        return e, c
+    db.soft_delete_user(openid, by=oid)
+    db.log_audit(oid, "delete_user", target=openid, detail=u.get("marketer_name"))
+    return jsonify({"ok": True, "message": f"已删除用户 {u.get('marketer_name') or openid}"})
+
+
+@app.route("/api/admin/users/<openid>/restore", methods=["POST"])
+def admin_restore_user(openid):
+    """恢复已软删用户。"""
+    oid, err, code_ = _auth_admin()
+    if err:
+        return err, code_
+    u = db.get_user(openid)
+    if not u:
+        return jsonify({"error": "用户不存在"}), 404
+    db.restore_user(openid, by=oid)
+    db.log_audit(oid, "restore_user", target=openid, detail=u.get("marketer_name"))
+    return jsonify({"ok": True, "message": "已恢复用户", "status": "approved"})
 
 
 # ---------------------------------------------------------------------------

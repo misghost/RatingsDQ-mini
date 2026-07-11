@@ -70,6 +70,11 @@
   .tabs{display:flex;background:#f1f3f9;border-radius:12px;padding:5px;margin-bottom:24px}
   .tabs button{flex:1;background:none;color:var(--sub);padding:9px;border-radius:9px;font-size:14px;font-weight:600;transition:.2s}
   .tabs button.on{background:#fff;color:var(--primary);box-shadow:0 2px 6px rgba(15,27,51,.1)}
+  .um-tabs{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 14px}
+  .um-tab{padding:6px 14px;border-radius:999px;font-size:13px;font-weight:600;color:var(--sub);background:#f1f3f9;cursor:pointer;transition:.15s}
+  .um-tab:hover{background:#e7eaf2}
+  .um-tab.on{background:var(--primary);color:#fff}
+  .um-tab.danger.on{background:#e5484d}
   .field{margin-bottom:16px}
   .field label{display:block;font-size:13px;color:var(--sub);margin-bottom:7px;font-weight:600}
   .field input{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:11px;
@@ -187,6 +192,9 @@
   .rev-item .ri-sub{font-size:12.5px;color:var(--sub);margin-top:6px;line-height:1.6}
   .rev-actions{display:flex;gap:10px;margin-top:12px}
   .btn.sm{padding:8px 16px;font-size:13px}
+  .btn.danger{background:#e5484d;box-shadow:none}
+  .btn.danger:hover{background:#d23b40}
+  .ops{display:flex;gap:6px;flex-wrap:wrap}
   .login-err.ok{color:var(--green)}
 
   /* 品牌标记 / 健康分布条 */
@@ -374,6 +382,29 @@
   </div>
 </div>
 
+<div class="modal-mask hide" id="userEditMask" onclick="if(event.target===this)closeUserEdit()">
+  <div class="modal" style="max-width:460px">
+    <div class="toolbar" style="margin-bottom:14px">
+      <h3 style="margin:0">编辑用户</h3>
+      <button class="link" onclick="closeUserEdit()">关闭</button>
+    </div>
+    <input type="hidden" id="ueOpenid">
+    <div class="field"><label>姓名</label><input id="ueName" autocomplete="off"></div>
+    <div class="field"><label>所属机构</label><input id="ueOrg" autocomplete="off"></div>
+    <div class="field"><label>手机号</label><input id="uePhone" autocomplete="off"></div>
+    <div class="field"><label>邮箱</label><input id="ueEmail" autocomplete="off"></div>
+    <div class="field">
+      <label>角色</label>
+      <select id="ueRole">
+        <option value="user">市场人员</option>
+        <option value="admin">管理员</option>
+      </select>
+    </div>
+    <div class="msg" id="ueMsg"></div>
+    <button class="btn-primary" style="margin-top:14px" onclick="submitUserEdit()">保存修改</button>
+  </div>
+</div>
+
 <!-- 市场人员主视图 -->
 <div class="wrap hide" id="userView">
   <div class="card">
@@ -530,10 +561,17 @@
       <h2 style="margin:0">用户管理</h2>
       <button class="link" onclick="loadUserMgmt()">🔄 刷新</button>
     </div>
-    <div class="sec-title">重置用户密码（用于给存量账号设置初始密码 / 找回）</div>
+    <div class="um-tabs" id="umTabs">
+      <span class="um-tab on" data-s="all" onclick="switchUmScope('all')">全部</span>
+      <span class="um-tab" data-s="approved" onclick="switchUmScope('approved')">正常</span>
+      <span class="um-tab" data-s="disabled" onclick="switchUmScope('disabled')">已停用</span>
+      <span class="um-tab" data-s="pending" onclick="switchUmScope('pending')">待审核</span>
+      <span class="um-tab danger" data-s="deleted" onclick="switchUmScope('deleted')">回收站</span>
+    </div>
+    <div class="sec-title">编辑资料、停用 / 启用、删除 / 恢复、重置密码</div>
     <div class="tbl-wrap">
       <table id="userMgmtTable">
-        <thead><tr><th>姓名</th><th>机构</th><th>手机</th><th>角色</th><th>状态</th><th style="width:120px">操作</th></tr></thead>
+        <thead><tr><th>姓名</th><th>机构</th><th>手机</th><th>角色</th><th>状态</th><th style="width:280px">操作</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -913,23 +951,101 @@ async function submitChangePwd(){
   else { m.className="msg err"; m.textContent="❌ "+(r.body.error||"修改失败"); }
 }
 
-/* ---------- 用户管理（管理员）：重置密码 ---------- */
+/* ---------- 用户管理（管理员） ---------- */
+let UM_SCOPE = "all";
+function switchUmScope(s){
+  UM_SCOPE = s;
+  document.querySelectorAll("#umTabs .um-tab").forEach(t=>{
+    t.classList.toggle("on", t.getAttribute("data-s")===s);
+  });
+  loadUserMgmt();
+}
+function statusLabel(s){
+  return ({approved:"正常", disabled:"已停用", pending:"待审核", rejected:"已拒绝", deleted:"已删除"})[s] || s || "—";
+}
 async function loadUserMgmt(){
-  const r=await api("/api/admin/users");
-  const m=document.getElementById("userMgmtMsg");
+  const url = UM_SCOPE==="deleted" ? "/api/admin/users?scope=deleted" : "/api/admin/users";
+  const r = await api(url);
+  const m = document.getElementById("userMgmtMsg");
   if(r.status!==200){ m.className="msg err"; m.textContent="❌ 加载失败"; return; }
-  const list=r.body.users||[];
-  const tb=document.querySelector("#userMgmtTable tbody");
-  if(!list.length){ tb.innerHTML='<tr><td colspan="6" class="empty">暂无用户</td></tr>'; return; }
-  tb.innerHTML=list.map(u=>`
-    <tr>
+  const list = r.body.users || [];
+  const tb = document.querySelector("#userMgmtTable tbody");
+  if(!list.length){
+    tb.innerHTML = '<tr><td colspan="6" class="empty">'+(UM_SCOPE==="deleted"?"回收站为空":"暂无用户")+'</td></tr>';
+    return;
+  }
+  const isTrash = UM_SCOPE==="deleted";
+  tb.innerHTML = list.map(u=>{
+    const actions = isTrash
+      ? `<button class="btn sm" onclick="restoreUser('${esc(u.openid)}')">恢复</button>`
+      : `<button class="btn sm" onclick="openUserEdit('${esc(u.openid)}','${esc(u.name||"")}','${esc(u.organization||"")}','${esc(u.phone||"")}','${esc(u.email||"")}','${esc(u.role||"user")}')">编辑</button> `
+        + (u.status==="disabled"
+            ? `<button class="btn sm" onclick="enableUser('${esc(u.openid)}')">启用</button>`
+            : `<button class="btn sm grey" onclick="disableUser('${esc(u.openid)}','${esc(u.name||"")}')">停用</button>`)
+        + ` <button class="btn sm grey" onclick="resetPwd('${esc(u.openid)}','${esc(u.name||"")}')">重置密码</button>`
+        + ` <button class="btn sm danger" onclick="deleteUser('${esc(u.openid)}','${esc(u.name||"")}')">删除</button>`;
+    return `<tr>
       <td>${esc(u.name||"")}</td>
       <td>${esc(u.organization||"")}</td>
       <td>${esc(u.phone||"—")}</td>
       <td>${u.role==="admin"?"管理员":"市场人员"}</td>
-      <td>${esc(u.status||"")}</td>
-      <td><button class="btn sm" onclick="resetPwd('${esc(u.openid)}','${esc(u.name||"")}')">重置密码</button></td>
-    </tr>`).join("");
+      <td>${statusLabel(u.status)}</td>
+      <td class="ops">${actions}</td>
+    </tr>`;
+  }).join("");
+}
+function openUserEdit(openid,name,org,phone,email,role){
+  document.getElementById("ueOpenid").value=openid;
+  document.getElementById("ueName").value=name||"";
+  document.getElementById("ueOrg").value=org||"";
+  document.getElementById("uePhone").value=phone||"";
+  document.getElementById("ueEmail").value=email||"";
+  document.getElementById("ueRole").value=role||"user";
+  document.getElementById("ueMsg").textContent="";
+  document.getElementById("userEditMask").classList.remove("hide");
+}
+function closeUserEdit(){ document.getElementById("userEditMask").classList.add("hide"); }
+async function submitUserEdit(){
+  const openid=document.getElementById("ueOpenid").value;
+  const body={
+    name:document.getElementById("ueName").value.trim(),
+    organization:document.getElementById("ueOrg").value.trim(),
+    phone:document.getElementById("uePhone").value.trim(),
+    email:document.getElementById("ueEmail").value.trim(),
+    role:document.getElementById("ueRole").value
+  };
+  const m=document.getElementById("ueMsg");
+  if(!body.name){ m.className="msg err"; m.textContent="请填写姓名"; return; }
+  if(body.phone && !/^1[3-9]\d{9}$/.test(body.phone)){ m.className="msg err"; m.textContent="手机号格式不正确"; return; }
+  const r=await api("/api/admin/users/"+encodeURIComponent(openid),{ method:"PUT", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body) });
+  if(r.status===200){ m.className="msg ok"; m.textContent="✅ "+(r.body.message||"已保存"); setTimeout(closeUserEdit,900); loadUserMgmt(); }
+  else { m.className="msg err"; m.textContent="❌ "+(r.body.error||"保存失败"); }
+}
+async function disableUser(openid,name){
+  if(!confirm("确认停用「"+(name||openid)+"」？停用后该用户将无法登录。")) return;
+  const r=await api("/api/admin/users/"+encodeURIComponent(openid)+"/disable",{method:"POST"});
+  const m=document.getElementById("userMgmtMsg");
+  if(r.status===200){ m.className="msg ok"; m.textContent="✅ 已停用"; loadUserMgmt(); }
+  else { m.className="msg err"; m.textContent="❌ "+(r.body.error||"操作失败"); }
+}
+async function enableUser(openid){
+  const r=await api("/api/admin/users/"+encodeURIComponent(openid)+"/enable",{method:"POST"});
+  const m=document.getElementById("userMgmtMsg");
+  if(r.status===200){ m.className="msg ok"; m.textContent="✅ 已启用"; loadUserMgmt(); }
+  else { m.className="msg err"; m.textContent="❌ "+(r.body.error||"操作失败"); }
+}
+async function deleteUser(openid,name){
+  if(!confirm("确认删除「"+(name||openid)+"」？将移入回收站（可恢复）。")) return;
+  const r=await api("/api/admin/users/"+encodeURIComponent(openid),{method:"DELETE"});
+  const m=document.getElementById("userMgmtMsg");
+  if(r.status===200){ m.className="msg ok"; m.textContent="✅ "+(r.body.message||"已删除"); loadUserMgmt(); }
+  else { m.className="msg err"; m.textContent="❌ "+(r.body.error||"删除失败"); }
+}
+async function restoreUser(openid){
+  const r=await api("/api/admin/users/"+encodeURIComponent(openid)+"/restore",{method:"POST"});
+  const m=document.getElementById("userMgmtMsg");
+  if(r.status===200){ m.className="msg ok"; m.textContent="✅ 已恢复"; loadUserMgmt(); }
+  else { m.className="msg err"; m.textContent="❌ "+(r.body.error||"恢复失败"); }
 }
 async function resetPwd(openid, name){
   const pw=prompt("为「"+(name||openid)+"」设置新密码（6-64位，至少含字母与数字两类）：");

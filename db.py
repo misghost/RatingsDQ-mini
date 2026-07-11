@@ -111,6 +111,8 @@ def _migrate_users(conn):
     _add_col(conn, "users", "reviewed_at", "TEXT")
     _add_col(conn, "users", "reviewed_by", "TEXT")
     _add_col(conn, "users", "reject_reason", "TEXT")
+    # 软删除标记（NULL/空=未删，有值=删除时间）
+    _add_col(conn, "users", "deleted_at", "TEXT")
     # 旧数据（status 为 NULL）统一视为已审核通过，避免存量用户被锁死
     conn.execute("UPDATE users SET status='approved' WHERE status IS NULL OR status=''")
     # 通知偏好表
@@ -325,7 +327,7 @@ def user_has_password(openid):
     return bool(row and row["password_hash"])
 
 
-def list_users(status=None, role=None):
+def list_users(status=None, role=None, include_deleted=False):
     conn = get_conn()
     c = conn.cursor()
     sql = "SELECT * FROM users"
@@ -336,12 +338,69 @@ def list_users(status=None, role=None):
     if role:
         where.append("role=?")
         params.append(role)
+    if not include_deleted:
+        where.append("(deleted_at IS NULL OR deleted_at='')")
     if where:
         sql += " WHERE " + " AND ".join(where)
     sql += " ORDER BY (status='pending') DESC, created_at DESC"
     rows = c.execute(sql, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def update_user(openid, **fields):
+    """管理员修改用户资料。可改：marketer_name / organization / phone / email / role。
+    返回 (ok, error_msg)。手机号变更时校验不与其它账号冲突。
+    """
+    allowed = {"marketer_name", "organization", "phone", "email", "role"}
+    payload = {k: fields[k] for k in allowed if fields.get(k) is not None}
+    if not payload:
+        return False, "没有可更新的字段"
+    conn = get_conn()
+    c = conn.cursor()
+    u = c.execute("SELECT * FROM users WHERE openid=?", (openid,)).fetchone()
+    if not u:
+        conn.close()
+        return False, "用户不存在"
+    # 手机号唯一性校验
+    if "phone" in payload:
+        new_phone = payload["phone"].strip()
+        if new_phone and not re.match(r"^1[3-9]\d{9}$", new_phone):
+            conn.close()
+            return False, "手机号格式不正确"
+        clash = c.execute(
+            "SELECT openid FROM users WHERE phone=? AND openid!=?",
+            (new_phone, openid)).fetchone()
+        if clash:
+            conn.close()
+            return False, "该手机号已被其它账号使用"
+        payload["phone"] = new_phone
+    sets = ", ".join(f"{k}=?" for k in payload)
+    c.execute(f"UPDATE users SET {sets} WHERE openid=?",
+              list(payload.values()) + [openid])
+    conn.commit()
+    conn.close()
+    return True, None
+
+
+def soft_delete_user(openid, by=None):
+    """软删除用户（标记 deleted_at，保留数据便于恢复）。"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("UPDATE users SET deleted_at=datetime('now'), status='deleted' "
+              "WHERE openid=?", (openid,))
+    conn.commit()
+    conn.close()
+
+
+def restore_user(openid, by=None):
+    """恢复已软删用户（回到 approved 状态）。"""
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("UPDATE users SET deleted_at=NULL, status='approved' "
+              "WHERE openid=?", (openid,))
+    conn.commit()
+    conn.close()
 
 
 def set_user_status(openid, status, reviewed_by=None, reason=None):
