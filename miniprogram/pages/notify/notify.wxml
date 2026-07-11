@@ -39,7 +39,7 @@
 
     <view class="card">
       <view class="sec-title">预警阈值</view>
-      <view class="muted sm" style="margin-bottom:16rpx;">在到期前以下天数时，自动通过站内消息与已开启渠道提醒您。</view>
+      <view class="muted sm" style="margin-bottom:16rpx;">在到期前以下天数时，系统会通过您开启的「小程序服务提醒」等渠道自动提醒您。</view>
       <view class="chips">
         <view wx:for="{{dayPresets}}" wx:key="*this"
           class="chip {{notifyDays.indexOf(item) >= 0 ? 'on' : ''}}"

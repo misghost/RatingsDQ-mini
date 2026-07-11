@@ -1014,20 +1014,24 @@ def set_notif_subscribed(openid, subscribed):
 
 
 def get_approved_users_with_notif():
-    """已审核通过、且至少开启一个通知渠道的市场人员（不含 admin）。"""
+    """已审核通过的市场人员（不含 admin）。
+    默认开启「小程序服务提醒」渠道；已显式配置渠道的用户以配置为准。
+    微信订阅消息发送仍以用户是否授权(wx_subscribed)为准。"""
     conn = get_conn()
     rows = conn.execute(
         """SELECT u.openid, u.marketer_name, u.organization, u.phone, u.email AS u_email,
                   n.channels, n.email AS n_email, n.wx_subscribed
            FROM users u
            LEFT JOIN user_notif n ON u.openid = n.openid
-           WHERE u.status='approved' AND u.role!='admin'
-             AND n.channels IS NOT NULL AND n.channels != '[]'""").fetchall()
+           WHERE u.status='approved' AND u.role!='admin'""").fetchall()
     conn.close()
     out = []
     for r in rows:
         d = dict(r)
-        d["channels"] = json.loads(d["channels"] or "[]")
+        ch = json.loads(d["channels"] or "[]") if d["channels"] else []
+        if not ch:
+            ch = ["miniprogram"]  # 默认走小程序服务提醒
+        d["channels"] = ch
         d["email"] = d["n_email"] or d["u_email"]
         out.append(d)
     return out

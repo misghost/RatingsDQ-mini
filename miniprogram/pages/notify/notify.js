@@ -9,7 +9,7 @@ Page({
     loading: false,
     msg: '',
     canMiniprogram: true,
-    dayPresets: [7, 15, 30, 60, 90],
+    dayPresets: [7, 30, 60, 90],
     notifyDays: [30, 7]
   },
 

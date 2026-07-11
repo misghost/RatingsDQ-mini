@@ -600,7 +600,7 @@ def get_notification():
         return err, code_
     n = db.get_notif(oid)
     if not n:
-        return jsonify({"channels": [], "email": None, "wx_subscribed": 0})
+        return jsonify({"channels": ["miniprogram"], "email": None, "wx_subscribed": 0})
     return jsonify({
         "channels": json.loads(n["channels"] or "[]"),
         "email": n["email"],
@@ -670,51 +670,19 @@ def notif_test():
             else:
                 results.append({"channel": "miniprogram", "ok": False,
                                 "note": "未订阅或未配置模板/微信凭证"})
-    db.add_message(oid, "system", "【测试】站内消息",
-                   "这是一条测试站内消息，消息中心工作正常。")
     return jsonify({"ok": True, "results": results})
 
 
 def dispatch_notifications(ref_date=None, dry=False, manual=False):
     """扫描所有已审核市场人员的到期/临期评级，按各自预警阈值与订阅渠道推送。
-    站内消息中心（始终创建）+ 邮件（SMTP 已配）+ 微信订阅（已订阅且已配）。
+    提醒仅通过用户已开启的渠道下发：小程序服务提醒（微信订阅消息，需已授权）+ 邮件（SMTP 已配）。
+    不再通过站内消息中心推送到期提醒。
     返回 {messages, sent, skipped}。供手动触发与定时任务共用。"""
     if ref_date is None:
         ref_date = date.today()
     ref_iso = ref_date.isoformat()
-    # 1) 站内消息：所有 approved 市场人员（系统自带通道，不依赖渠道开关）
-    all_users = db.list_users(status="approved", role="user")
     messages, sent, skipped = [], [], []
-    for u in all_users:
-        oid = u["openid"]
-        ratings = db.get_my_ratings(oid)
-        for r in ratings:
-            if r.get("renewed") in (1, "1"):
-                continue
-            try:
-                exp = date.fromisoformat(r["expiry_date"])
-            except Exception:
-                continue
-            days = (exp - ref_date).days
-            if r["status"] != "overdue" and not (r["remind_date"]
-                                                  and r["remind_date"] <= ref_iso):
-                continue
-            ndays = db.get_notify_days(oid)
-            triggered = [d for d in ndays if days <= d]
-            if not triggered and r["status"] != "overdue":
-                continue
-            key = min(triggered) if triggered else -1
-            if db.already_sent(oid, r["id"], key, "inapp"):
-                continue
-            if not dry:
-                tag = "已过期" if r["status"] == "overdue" else "即将到期"
-                db.add_message(oid, "expire_warn",
-                               f"{tag}：{r['subject']}",
-                               f"评级将于 {r['expiry_date']} 到期（剩余 {days} 天），请及时处理。",
-                               rating_id=r["id"])
-                db.mark_sent(oid, r["id"], key, "inapp")
-            messages.append({"openid": oid, "subject": r["subject"], "days": days})
-    # 2) 渠道推送（邮件/微信）：仅对开启对应渠道的用户
+    # 渠道推送（小程序服务提醒 / 邮件）：仅对开启对应渠道的用户
     users = db.get_approved_users_with_notif()
     for u in users:
         ratings = db.get_my_ratings(u["openid"])
@@ -751,7 +719,7 @@ def admin_notify_send():
     dry = bool(body.get("dry_run", False))
     res = dispatch_notifications(ref_date=date.today(), dry=dry, manual=True)
     db.log_audit(oid, "notify:send",
-                 detail=f"消息 {len(res['messages'])} / 渠道 {len(res['sent'])}")
+                 detail=f"渠道已发 {len(res['sent'])} / 跳过 {len(res['skipped'])}")
     return jsonify(res)
 
 
@@ -831,6 +799,21 @@ def _fmt_wx_date(iso):
         return iso
 
 
+def _truncate_for_wx(key, text):
+    """按微信订阅消息字段类型截断，避免 47003：
+    name(姓名)≤10字、thing(事项)≤20字、character_string≤32字。"""
+    t = str(text or "")
+    if key.startswith("name"):
+        limit = 10
+    elif key.startswith("thing"):
+        limit = 20
+    elif key.startswith("character_string"):
+        limit = 32
+    else:
+        limit = 50
+    return t[:limit]
+
+
 def _send_subscribe(openid, ratings):
     """微信订阅消息发送（一次性订阅，需用户此前已授权）。"""
     token = _wx_access_token()
@@ -838,7 +821,7 @@ def _send_subscribe(openid, ratings):
         return False
     # 默认字段映射（与「定时维护提醒」模板一致：客户名称/提醒时间/提醒内容）。
     # 可通过环境变量 WX_TEMPLATE_DATA(JSON) 覆盖。
-    default_map = {"name1": "{subject}", "time3": "{expiry}", "thing4": "合同到期"}
+    default_map = {"name1": "{subject}", "time3": "{expiry}", "thing4": "{expiry}到期"}
     fmap = default_map
     if WX_TEMPLATE_DATA:
         try:
@@ -846,12 +829,13 @@ def _send_subscribe(openid, ratings):
         except Exception:
             fmap = default_map
     top = ratings[0] if ratings else {}
-    subj = (top.get("subject") or "")[:20]
-    raw_expiry = top.get("expiry_date") or ""
-    expiry = _fmt_wx_date(raw_expiry)
+    subj = top.get("subject") or ""
+    expiry = _fmt_wx_date(top.get("expiry_date") or "")
     count = len(ratings)
-    data = {k: {"value": str(v).format(subject=subj, expiry=expiry, count=count)}
-            for k, v in fmap.items()}
+    data = {}
+    for k, v in fmap.items():
+        val = v.format(subject=subj, expiry=expiry, count=count) if "{" in v else v
+        data[k] = {"value": _truncate_for_wx(k, val)}
     payload = {"touser": openid, "template_id": WX_TEMPLATE_ID, "data": data}
     url = ("https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=%s"
            % urllib.parse.quote(token))
