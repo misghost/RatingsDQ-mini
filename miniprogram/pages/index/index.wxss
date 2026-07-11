@@ -2,8 +2,8 @@
 
 /* 搜索框 */
 .search {
-  width: 100%; padding: 18rpx 28rpx; background: #fff;
-  border: 1rpx solid #e6e8eb; border-radius: 999rpx; font-size: 26rpx;
+  width: 100%; padding: 28rpx 32rpx; background: #fff;
+  border: 1rpx solid #e6e8eb; border-radius: 999rpx; font-size: 30rpx;
   box-shadow: 0 4rpx 16rpx rgba(20, 30, 50, 0.04);
 }
 
