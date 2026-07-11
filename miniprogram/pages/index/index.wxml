@@ -74,5 +74,13 @@
         <button class="btn btn-grey btn-block" style="height:64rpx;line-height:64rpx;font-size:26rpx;border-radius:999rpx;" data-id="{{item.id}}" bindtap="renew">标记已续期 / 已重评</button>
       </view>
     </view>
+
+    <view class="card sec-card" bindtap="goChangePw">
+      <view class="sec-left">
+        <text class="sec-title">账号安全</text>
+        <text class="sec-sub">修改登录密码，防止账号被冒用</text>
+      </view>
+      <text class="sec-arrow">›</text>
+    </view>
   </block>
 </block>

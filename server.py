@@ -189,12 +189,23 @@ def bind_account():
     body = request.get_json(silent=True) or {}
     phone = (body.get("phone") or "").strip()
     code = (body.get("code") or "").strip()
+    password = (body.get("password") or "").strip()
     if not phone:
         return jsonify({"error": "请输入注册时使用的手机号"}), 400
     if not code:
         return jsonify({"error": "缺少微信登录凭证"}), 400
     if not re.match(r"^1[3-9]\d{9}$", phone):
         return jsonify({"error": "手机号格式不正确"}), 400
+
+    # 先定位账号并校验密码，防止「知道别人手机号即可冒名绑定」
+    target = db.find_user_by_phone_or_name(phone, "")
+    if not target:
+        return jsonify({"error": "未找到该手机号对应的账号，请先注册"}), 404
+    if not target.get("password_hash"):
+        return jsonify({"code": "NEED_PASSWORD_SET",
+                        "error": "该账号尚未设置密码，请联系管理员设置初始密码后再绑定"}), 403
+    if not db.verify_password(password, target["password_hash"]):
+        return jsonify({"error": "手机号或密码错误"}), 401
 
     new_openid = _openid_from_code(code, "user")
     if not new_openid:
@@ -252,19 +263,30 @@ def web_login():
         openid = "admin"
         db.upsert_user(openid, role="admin", marketer_name=name)
         u = db.get_user(openid)
+        # 首次：用环境变量 ADMIN_PASSWORD 播种 password_hash，便于后台自助改密
+        if ADMIN_PASSWORD and not u.get("password_hash"):
+            db.set_password(openid, ADMIN_PASSWORD)
         db.log_audit(openid, "login", detail="web/admin")
         return _issue_session(openid, u)
 
     phone = (body.get("phone") or "").strip()
     name = (body.get("name") or "").strip()
+    password = (body.get("password") or "").strip()
     if not (phone or name):
         return jsonify({"error": "请输入手机号或姓名"}), 400
+    if not password:
+        return jsonify({"error": "请输入登录密码"}), 400
 
     # 按手机号或姓名解析已注册账号（不再自行派生 openid，避免身份错配）
     u = db.find_user_by_phone_or_name(phone, name)
     if not u:
         return jsonify({"code": "NOT_REGISTERED",
                         "error": "未找到账号，请先注册或通过管理员审核"}), 404
+    if not u.get("password_hash"):
+        return jsonify({"code": "NEED_PASSWORD_SET",
+                        "error": "该账号尚未设置密码，请联系管理员设置初始密码"}), 403
+    if not db.verify_password(password, u["password_hash"]):
+        return jsonify({"error": "手机号/姓名或密码错误"}), 401
     if u["status"] != "approved":
         code = "PENDING" if u["status"] == "pending" else "REJECTED"
         msg = ("账号审核中，请等待管理员审核" if code == "PENDING"
@@ -273,6 +295,63 @@ def web_login():
 
     db.log_audit(u["openid"], "login", detail="web")
     return _issue_session(u["openid"], u)
+
+
+@app.route("/api/change-password", methods=["POST"])
+def change_password():
+    """自助修改密码（任何已登录用户，含管理员）。
+
+    普通用户：需提供正确的旧密码。
+    管理员：旧密码可为 ADMIN_PASSWORD（环境变量）或已设置的 password_hash。
+    """
+    oid, err, code_ = _user_gate(current_openid())
+    if err:
+        return err, code_
+    u = db.get_user(oid)
+    body = request.get_json(silent=True) or {}
+    old_pw = (body.get("old_password") or "").strip()
+    new_pw = (body.get("new_password") or "").strip()
+    if not new_pw:
+        return jsonify({"error": "请输入新密码"}), 400
+    if not db.password_strength_ok(new_pw):
+        return jsonify({"error": "新密码需 6-64 位，至少含字母与数字两类"}), 400
+
+    is_admin = u["role"] == "admin"
+    # 校验旧密码
+    if u.get("password_hash"):
+        if not db.verify_password(old_pw, u["password_hash"]):
+            return jsonify({"error": "原密码错误"}), 401
+    elif is_admin and ADMIN_PASSWORD:
+        # 管理员尚未设置 password_hash：允许用环境变量口令作为原密码
+        if old_pw != ADMIN_PASSWORD:
+            return jsonify({"error": "原密码错误"}), 401
+    else:
+        return jsonify({"error": "该账号尚未设置密码，请联系管理员"}), 400
+
+    db.set_password(oid, new_pw)
+    db.log_audit(oid, "change_password")
+    return jsonify({"ok": True, "message": "密码修改成功"})
+
+
+@app.route("/api/admin/reset-password", methods=["POST"])
+def admin_reset_password():
+    """管理员重置指定用户的密码（用于给存量无密码账号初始化）。"""
+    oid, err, code_ = _auth_admin()
+    if err:
+        return err, code_
+    body = request.get_json(silent=True) or {}
+    target = (body.get("openid") or "").strip()
+    new_pw = (body.get("new_password") or "").strip()
+    if not target:
+        return jsonify({"error": "缺少目标 openid"}), 400
+    if not db.password_strength_ok(new_pw):
+        return jsonify({"error": "新密码需 6-64 位，至少含字母与数字两类"}), 400
+    tu = db.get_user(target)
+    if not tu:
+        return jsonify({"error": "目标账号不存在"}), 404
+    db.set_password(target, new_pw)
+    db.log_audit(oid, "reset_password", target=target)
+    return jsonify({"ok": True, "message": f"已重置 {tu.get('marketer_name') or target} 的密码"})
 
 
 # ---------------------------------------------------------------------------
@@ -292,11 +371,14 @@ def register():
     email = (body.get("email") or "").strip() or None
     code = (body.get("code") or "").strip()
     platform = body.get("platform", "miniprogram")
+    password = body.get("password") or ""
 
     if not (organization and name and phone):
         return jsonify({"error": "请填写所属机构、姓名、手机号"}), 400
     if not re.match(r"^1[3-9]\d{9}$", phone):
         return jsonify({"error": "手机号格式不正确"}), 400
+    if not db.password_strength_ok(password):
+        return jsonify({"error": "请设置登录密码（6-64位，至少含字母与数字两类）"}), 400
 
     # 派生稳定 openid
     if platform == "web":
@@ -311,7 +393,8 @@ def register():
     u = db.get_user(openid)
     if u and u["status"] == "approved":
         return jsonify({"status": "approved", "message": "该账号已审核通过，可直接登录"})
-    db.register_user(openid, organization, name, phone, email, role="user")
+    db.register_user(openid, organization, name, phone, email, role="user",
+                     password=password)
     db.log_audit(None, "register", target=phone,
                  detail=f"{name} / {organization}")
     return jsonify({"status": "pending", "message": "注册成功，请等待管理员审核"})

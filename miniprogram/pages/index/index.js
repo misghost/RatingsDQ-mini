@@ -62,6 +62,7 @@ Page({
 
   goToLogin() { wx.navigateTo({ url: '/pages/login/login' }); },
   goMessages() { wx.switchTab({ url: '/pages/messages/messages' }); },
+  goChangePw() { wx.navigateTo({ url: '/pages/profile/profile' }); },
 
   switchFilter(e) { this.setData({ active: e.currentTarget.dataset.key }); this.applyFilter(); },
   setSort(e) { this.setData({ sort: e.currentTarget.dataset.key }); if (this.data.loggedIn) this.load(); else this.applyFilter(); },

@@ -16,7 +16,46 @@ db.py — 评级到期提醒后端 存储层（SQLite，单文件）
 import sqlite3
 import os
 import json
+import hashlib
+import secrets
+import re
 from datetime import datetime, date
+
+
+# ---------------------------------------------------------------------------
+# 密码哈希（标准库 pbkdf2_hmac，无外部依赖；salt 随机、迭代 20 万次）
+# 存储格式： pbkdf2$<salt_b64>$<hash_b64>
+# ---------------------------------------------------------------------------
+def _hash_password(pw):
+    if not pw:
+        return ""
+    salt = secrets.token_bytes(16)
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), salt, 200000)
+    return "pbkdf2$" + salt.hex() + "$" + dk.hex()
+
+
+def verify_password(pw, stored):
+    if not pw or not stored or not stored.startswith("pbkdf2$"):
+        return False
+    try:
+        _, salt_hex, hash_hex = stored.split("$", 2)
+        salt = bytes.fromhex(salt_hex)
+        dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), salt, 200000)
+        return secrets.compare_digest(dk.hex(), hash_hex)
+    except Exception:
+        return False
+
+
+# 简易强度校验：6-64 位，至少含两类字符
+def password_strength_ok(pw):
+    if not pw or not (6 <= len(pw) <= 64):
+        return False
+    kinds = 0
+    if re.search(r"[a-z]", pw): kinds += 1
+    if re.search(r"[A-Z]", pw): kinds += 1
+    if re.search(r"\d", pw): kinds += 1
+    if re.search(r"[^\w]", pw): kinds += 1
+    return kinds >= 2
 
 def _db_path():
     """DB 路径动态读取，便于云托管挂载 CFS 卷（如 /data/rating.db）。"""
@@ -67,6 +106,7 @@ def _migrate_users(conn):
     _add_col(conn, "users", "organization", "TEXT")
     _add_col(conn, "users", "phone", "TEXT")
     _add_col(conn, "users", "email", "TEXT")
+    _add_col(conn, "users", "password_hash", "TEXT")
     _add_col(conn, "users", "status", "TEXT", "'approved'")
     _add_col(conn, "users", "reviewed_at", "TEXT")
     _add_col(conn, "users", "reviewed_by", "TEXT")
@@ -238,11 +278,13 @@ def upsert_user(openid, role=None, marketer_name=None, status=None):
 # ---------------------------------------------------------------------------
 # 注册 / 审核
 # ---------------------------------------------------------------------------
-def register_user(openid, organization, name, phone, email=None, role="user"):
+def register_user(openid, organization, name, phone, email=None, role="user", password=None):
     """
     提交注册申请：创建待审核(pending)账号。
     若已审核通过(approved)则保持通过、仅更新资料；若待审核/已拒绝则重新置为待审核。
+    password：明文，传入时哈希后存入 password_hash（用于 Web 登录/防冒名绑定）。
     """
+    pw_hash = _hash_password(password) if password else ""
     conn = get_conn()
     c = conn.cursor()
     existing = c.execute("SELECT * FROM users WHERE openid=?", (openid,)).fetchone()
@@ -251,15 +293,36 @@ def register_user(openid, organization, name, phone, email=None, role="user"):
             """UPDATE users SET organization=?, marketer_name=?, phone=?, email=?, role=?
                WHERE openid=?""",
             (organization, name, phone, email, role, openid))
+        if pw_hash and not existing["password_hash"]:
+            c.execute("UPDATE users SET password_hash=? WHERE openid=?",
+                      (pw_hash, openid))
         if existing["status"] not in ("approved",):
             c.execute("UPDATE users SET status='pending' WHERE openid=?", (openid,))
     else:
         c.execute(
-            """INSERT INTO users(openid, role, marketer_name, organization, phone, email, status)
-               VALUES(?,?,?,?,?,?,'pending')""",
-            (openid, role, name, organization, phone, email))
+            """INSERT INTO users(openid, role, marketer_name, organization, phone, email, password_hash, status)
+               VALUES(?,?,?,?,?,?,?,'pending')""",
+            (openid, role, name, organization, phone, email, pw_hash))
     conn.commit()
     conn.close()
+
+
+def set_password(openid, password):
+    """设置/重置某用户的密码（哈希存储）。password 为空字符串则清空（禁用密码登录）。"""
+    pw_hash = _hash_password(password)
+    conn = get_conn()
+    c = conn.cursor()
+    c.execute("UPDATE users SET password_hash=? WHERE openid=?", (pw_hash, openid))
+    conn.commit()
+    conn.close()
+
+
+def user_has_password(openid):
+    conn = get_conn()
+    row = c = conn.execute("SELECT password_hash FROM users WHERE openid=?",
+                           (openid,)).fetchone()
+    conn.close()
+    return bool(row and row["password_hash"])
 
 
 def list_users(status=None, role=None):

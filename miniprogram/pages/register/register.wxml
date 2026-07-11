@@ -27,6 +27,17 @@
         <input placeholder="开启邮件提醒时必填" data-f="email"
                value="{{email}}" bindinput="onInput" />
       </view>
+      <view class="field">
+        <text class="lbl">登录密码</text>
+        <input placeholder="6-64位，至少含字母与数字" password="true"
+               data-f="password" value="{{password}}" bindinput="onInput" />
+        <text class="hint">此密码用于网页端登录及微信账号绑定，防止他人冒用。</text>
+      </view>
+      <view class="field">
+        <text class="lbl">确认密码</text>
+        <input placeholder="再次输入密码" password="true"
+               data-f="confirm" value="{{confirm}}" bindinput="onInput" />
+      </view>
     </view>
     <button class="btn-primary reg-btn" loading="{{loading}}" bindtap="submit">提交注册</button>
     <view class="skip-row" bindtap="goLogin"><text class="skip-text">已有账号？去登录</text></view>

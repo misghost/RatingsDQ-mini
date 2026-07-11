@@ -1,0 +1,28 @@
+<view class="pf-wrap">
+  <view class="logo">修改登录密码</view>
+  <view class="sub">密码用于网页端登录与微信账号绑定，定期更换更安全</view>
+
+  <view wx:if="{{errMsg}}" class="err-banner"><text>{{errMsg}}</text></view>
+  <view wx:if="{{okMsg}}" class="ok-banner"><text>{{okMsg}}</text></view>
+
+  <view class="card">
+    <view class="field">
+      <text class="lbl">原密码</text>
+      <input placeholder="请输入当前密码" password="true" data-f="oldPw"
+             value="{{oldPw}}" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <text class="lbl">新密码</text>
+      <input placeholder="6-64位，至少含字母与数字" password="true" data-f="newPw"
+             value="{{newPw}}" bindinput="onInput" />
+    </view>
+    <view class="field">
+      <text class="lbl">确认新密码</text>
+      <input placeholder="再次输入新密码" password="true" data-f="confirmPw"
+             value="{{confirmPw}}" bindinput="onInput" />
+    </view>
+  </view>
+
+  <button class="btn btn-primary btn-block pf-btn" loading="{{loading}}" bindtap="submit">确认修改</button>
+  <view class="skip-row" bindtap="goBack"><text class="skip-text">返回</text></view>
+</view>

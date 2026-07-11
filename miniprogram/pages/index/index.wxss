@@ -57,3 +57,15 @@
 .row { display: flex; justify-content: space-between; padding: 6rpx 0; font-size: 26rpx; }
 .k { color: #9aa0a6; }
 .v { color: #1f2329; }
+
+/* 账号安全入口卡 */
+.sec-card {
+  margin-top: 32rpx; padding: 32rpx 36rpx;
+  display: flex; align-items: center; justify-content: space-between;
+  background: #fff; border-radius: 20rpx;
+  box-shadow: 0 4rpx 20rpx rgba(15,27,51,0.05);
+}
+.sec-left { display: flex; flex-direction: column; }
+.sec-title { font-size: 30rpx; font-weight: 600; color: #0f1b33; }
+.sec-sub { font-size: 24rpx; color: #94a3b8; margin-top: 8rpx; }
+.sec-arrow { font-size: 44rpx; color: #c4c9d2; }

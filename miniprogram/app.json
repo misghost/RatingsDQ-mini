@@ -6,7 +6,8 @@
     "pages/notify/notify",
     "pages/upload/upload",
     "pages/admin/admin",
-    "pages/messages/messages"
+    "pages/messages/messages",
+    "pages/profile/profile"
   ],
   "window": {
     "navigationBarBackgroundColor": "#2f6bff",
